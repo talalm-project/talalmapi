@@ -272,7 +272,7 @@ def build_parser():
     spec_parser.add_argument("--keyword", default="")
     spec_parser.set_defaults(handler=run_spec)
 
-    greet_parser = subparsers.add_parser("system.greet", help="Run the sample system task")
+    greet_parser = subparsers.add_parser("system:greet", help="Run the sample system task")
     greet_parser.set_defaults(handler=run_greet)
 
     seed_parser = subparsers.add_parser("system:seed", help="Seed the default application data")
@@ -281,7 +281,7 @@ def build_parser():
     db_create_parser = subparsers.add_parser("db:create", help="Create the configured database")
     db_create_parser.set_defaults(handler=run_db_create)
 
-    db_migrate_parser = subparsers.add_parser("db.migrate", help="Generate a new migration")
+    db_migrate_parser = subparsers.add_parser("db:migrate", help="Generate a new migration")
     db_migrate_parser.add_argument("--message", default="update schema")
     db_migrate_parser.set_defaults(handler=run_db_migrate)
 
@@ -289,14 +289,14 @@ def build_parser():
     db_upgrade_parser.add_argument("--revision", default="head")
     db_upgrade_parser.set_defaults(handler=run_db_upgrade)
 
-    db_downgrade_parser = subparsers.add_parser("db.downgrade", help="Roll back migrations")
+    db_downgrade_parser = subparsers.add_parser("db:downgrade", help="Roll back migrations")
     db_downgrade_parser.add_argument("--revision", default="-1")
     db_downgrade_parser.set_defaults(handler=run_db_downgrade)
 
-    db_history_parser = subparsers.add_parser("db.history", help="Show migration history")
+    db_history_parser = subparsers.add_parser("db:history", help="Show migration history")
     db_history_parser.set_defaults(handler=run_db_history)
 
-    db_current_parser = subparsers.add_parser("db.current", help="Show current revision")
+    db_current_parser = subparsers.add_parser("db:current", help="Show current revision")
     db_current_parser.set_defaults(handler=run_db_current)
 
     routes_parser = subparsers.add_parser("routes", help="Print mounted routes")
@@ -309,7 +309,7 @@ def build_parser():
     services_create_bucket_parser.set_defaults(handler=run_services_create_bucket)
 
     users_create_admin_parser = subparsers.add_parser(
-        "users.create-admin",
+        "users:create-admin",
         help="Create an admin user in the configured database",
     )
     users_create_admin_parser.add_argument("--email", required=True)

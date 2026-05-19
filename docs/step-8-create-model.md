@@ -20,7 +20,7 @@ Import it in `app/models/__init__.py` so Alembic sees it.
 
 ## 8.2 Generate the migration
 ```bash
-python -m app.cli db.migrate --message "add projects"
+python -m app.cli db:migrate --message "add projects"
 python -m app.cli db:upgrade
 ```
 
