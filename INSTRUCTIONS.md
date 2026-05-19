@@ -42,3 +42,8 @@
 - Use factories from `spec/factories.py` for database records instead of hand-building persisted objects.
 - Cover the happy path first, then add failure cases for validation, missing records, and authentication when relevant.
 - When adding a new feature, update specs before implementation and keep the new code aligned with the existing request-level testing style.
+
+## Database Schema
+
+- When a new model is added or when prompted to create a migration that changes the schema of the application, update the documentation in SCHEMA.md
+- Refer to the structure of SCHEMA.md for updated structure of tables

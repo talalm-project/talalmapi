@@ -1,7 +1,4 @@
 import os
-import shutil
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -18,9 +15,6 @@ def app():
     Base.metadata.create_all(bind=db.engine)
     yield application
     Base.metadata.drop_all(bind=db.engine)
-    storage_root = Path(application.state.settings.STORAGE_LOCAL_ROOT)
-    if storage_root.exists():
-        shutil.rmtree(storage_root)
 
 
 @pytest.fixture()

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.cli import run_system_seed
+from app.cli import build_parser, run_services_create_bucket, run_system_seed
 from app.helpers.api_helpers import password_match
 from app.models.user import User
 from spec.factories import UserFactory
@@ -51,3 +51,33 @@ def test_system_seed_updates_existing_user_to_default_admin(app, db_session, cap
     assert user.status == "active"
     assert password_match("password", user.password_hash)
     assert capsys.readouterr().out.strip() == "Admin user updated: admin@example.com"
+
+
+def test_services_create_bucket_creates_configured_rustfs_bucket(capsys, monkeypatch):
+    settings = SimpleNamespace(STORAGE_S3_BUCKET="talalm-local")
+
+    monkeypatch.setattr("app.cli._active_settings", lambda: settings)
+    monkeypatch.setattr("app.storage.ensure_bucket", lambda active_settings: True)
+
+    result = run_services_create_bucket(SimpleNamespace())
+
+    assert result == 0
+    assert capsys.readouterr().out.strip() == "RustFS bucket created: talalm-local"
+
+
+def test_services_create_bucket_reports_existing_bucket(capsys, monkeypatch):
+    settings = SimpleNamespace(STORAGE_S3_BUCKET="talalm-local")
+
+    monkeypatch.setattr("app.cli._active_settings", lambda: settings)
+    monkeypatch.setattr("app.storage.ensure_bucket", lambda active_settings: False)
+
+    result = run_services_create_bucket(SimpleNamespace())
+
+    assert result == 0
+    assert capsys.readouterr().out.strip() == "RustFS bucket already exists: talalm-local"
+
+
+def test_services_create_bucket_command_is_registered():
+    args = build_parser().parse_args(["services:create_bucket"])
+
+    assert args.handler is run_services_create_bucket

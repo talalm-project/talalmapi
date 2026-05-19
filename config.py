@@ -32,7 +32,7 @@ def _load_database_config():
 
 
 class Config:
-    APP_NAME = os.getenv("APP_NAME", "Default API Fast")
+    APP_NAME = os.getenv("APP_NAME", "TalaLM")
     APP_ENV = os.getenv("APP_ENV", "development")
     API_PREFIX = os.getenv("API_PREFIX", "")
 
@@ -41,19 +41,22 @@ class Config:
         "DATABASE_URL",
         _db_config.get(
             "uri",
-            "postgresql+psycopg://postgres:postgres@localhost:5432/default_api_fast_development",
+            "postgresql+psycopg://postgres:postgres@localhost:5432/talalm_development",
         ),
     )
     SECRET_KEY = os.getenv("SECRET_KEY", "default-api-fast-secret")
 
-    STORAGE_SERVICE = os.getenv("STORAGE_SERVICE", "local")
-    STORAGE_LOCAL_ROOT = os.getenv("STORAGE_LOCAL_ROOT", str(Path("storage")))
-    STORAGE_LOCAL_PUBLIC_ENDPOINT = os.getenv("STORAGE_LOCAL_PUBLIC_ENDPOINT", "/files")
     STORAGE_S3_BUCKET = os.getenv("STORAGE_S3_BUCKET", "")
     STORAGE_S3_REGION = os.getenv("STORAGE_S3_REGION", "")
     STORAGE_S3_ENDPOINT = os.getenv("STORAGE_S3_ENDPOINT", "")
+    STORAGE_S3_ACCESS_KEY_ID = os.getenv("STORAGE_S3_ACCESS_KEY_ID", "")
+    STORAGE_S3_SECRET_ACCESS_KEY = os.getenv("STORAGE_S3_SECRET_ACCESS_KEY", "")
+    STORAGE_S3_SESSION_TOKEN = os.getenv("STORAGE_S3_SESSION_TOKEN", "")
     STORAGE_S3_PREFIX = os.getenv("STORAGE_S3_PREFIX", "")
     STORAGE_S3_PUBLIC_URL = os.getenv("STORAGE_S3_PUBLIC_URL", "")
     STORAGE_S3_PRESIGNED_EXPIRES_IN = int(os.getenv("STORAGE_S3_PRESIGNED_EXPIRES_IN", "3600"))
     STORAGE_S3_ACL = os.getenv("STORAGE_S3_ACL", "")
+    STORAGE_S3_SIGNATURE_VERSION = os.getenv("STORAGE_S3_SIGNATURE_VERSION", "s3v4")
+    STORAGE_S3_ADDRESSING_STYLE = os.getenv("STORAGE_S3_ADDRESSING_STYLE", "path")
+    STORAGE_S3_CREATE_BUCKET = os.getenv("STORAGE_S3_CREATE_BUCKET", "false").lower() == "true"
     STORAGE_MAX_CONTENT_LENGTH_MB = int(os.getenv("STORAGE_MAX_CONTENT_LENGTH_MB", "100"))

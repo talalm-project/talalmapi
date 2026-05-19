@@ -55,7 +55,7 @@ Important variables:
 - `SECRET_KEY`: JWT signing key
 - `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`: PostgreSQL settings
 - `DATABASE_URL`: optional full database URL override
-- `STORAGE_*`: local or S3-backed file storage settings
+- `STORAGE_*`: RustFS file storage settings through the S3-compatible API
 - `AWS_ENDPOINT`: set to `http://localhost:4566` when developing against MiniStack
 - `SQS_QUEUE_URL`: queue URL for the SQS queue your app should use
 
@@ -151,6 +151,51 @@ Useful development endpoints:
 - `/users` CRUD endpoints require an authenticated admin user
 - `POST /uploads`
 
+## File Uploads with RustFS
+
+The root `docker-compose.yml` provides RustFS for local S3-compatible object
+storage. Start it from the repository root before running the API with S3
+storage enabled:
+
+```bash
+docker compose up -d
+```
+
+Then create the bucket from the backend directory so the command reads
+`talalmapi/.env`:
+
+```bash
+python -m app.cli services:create_bucket
+```
+
+RustFS defaults:
+- S3 API: `http://localhost:9000`
+- Console: `http://localhost:9001`
+- Access key: `rustfsadmin`
+- Secret key: `rustfsadmin`
+
+Set these values in `talalmapi/.env`:
+
+```bash
+STORAGE_S3_BUCKET=talalm-local
+STORAGE_S3_REGION=us-east-1
+STORAGE_S3_ENDPOINT=http://localhost:9000
+STORAGE_S3_ACCESS_KEY_ID=rustfsadmin
+STORAGE_S3_SECRET_ACCESS_KEY=rustfsadmin
+STORAGE_S3_PUBLIC_URL=http://localhost:9000/talalm-local
+STORAGE_S3_SIGNATURE_VERSION=s3v4
+STORAGE_S3_ADDRESSING_STYLE=path
+STORAGE_S3_CREATE_BUCKET=true
+```
+
+`python -m app.cli services:create_bucket` creates the bucket from the backend
+`.env` configuration. `STORAGE_S3_CREATE_BUCKET=true` can also create it during
+API startup when it is missing. Upload through the API with:
+
+```bash
+curl -F file=@avatar.png http://127.0.0.1:3000/uploads
+```
+
 ## Steps
 - [1) Create a new project from this codebase](docs/step-1-create-project.md)
 - [2) Configure the environment](docs/step-2-configure-environment.md)
@@ -161,7 +206,7 @@ Useful development endpoints:
 - [7) Command-line routines (`python -m app.cli`)](docs/step-7-cli.md)
 - [8) Create a new model (example: Project)](docs/step-8-create-model.md)
 - [9) Create a controller (example: Project)](docs/step-9-create-controller.md)
-- [10) File uploads (local + S3)](docs/step-10-file-uploads.md)
+- [10) File uploads with RustFS](docs/step-10-file-uploads.md)
 
 ## Examples
 - [Example test stubs](docs/example-test-stubs.md)

@@ -17,7 +17,7 @@ Key settings:
 - `DATABASE_URL`: optional full override
 - `DB_*`: component-based PostgreSQL settings used by `database.yaml`
 - `SECRET_KEY`: JWT signing key
-- `STORAGE_*`: local or S3-backed file storage
+- `STORAGE_*`: RustFS file storage through the S3-compatible API
 - `AWS_ENDPOINT`: point this to `http://localhost:4566` when using MiniStack
 - `SQS_QUEUE_URL`: queue URL for the SQS queue the app should use
 

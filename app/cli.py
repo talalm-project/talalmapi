@@ -166,7 +166,19 @@ def run_db_current(_args):
 def run_routes(_args):
     settings = _active_settings()
     print(f"Mounted API prefix: {settings.API_PREFIX}")
-    print("Routes: /health, /login, /users, /uploads, /files/{key}")
+    print("Routes: /health, /login, /users, /uploads")
+    return 0
+
+
+def run_services_create_bucket(_args):
+    from app.storage import ensure_bucket
+
+    settings = _active_settings()
+    created = ensure_bucket(settings)
+    if created:
+        print(f"RustFS bucket created: {settings.STORAGE_S3_BUCKET}")
+    else:
+        print(f"RustFS bucket already exists: {settings.STORAGE_S3_BUCKET}")
     return 0
 
 
@@ -289,6 +301,12 @@ def build_parser():
 
     routes_parser = subparsers.add_parser("routes", help="Print mounted routes")
     routes_parser.set_defaults(handler=run_routes)
+
+    services_create_bucket_parser = subparsers.add_parser(
+        "services:create_bucket",
+        help="Create the configured RustFS bucket",
+    )
+    services_create_bucket_parser.set_defaults(handler=run_services_create_bucket)
 
     users_create_admin_parser = subparsers.add_parser(
         "users.create-admin",

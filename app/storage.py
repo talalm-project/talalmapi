@@ -1,11 +1,10 @@
-import shutil
 import uuid
-from pathlib import Path
 from urllib.parse import quote
 
 import boto3
-from fastapi import HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from botocore.client import Config as BotoConfig
+from botocore.exceptions import ClientError
+from fastapi import UploadFile
 from werkzeug.utils import secure_filename
 
 
@@ -13,58 +12,28 @@ _storage_s3_client = None
 
 
 def init_storage(settings):
-    service = settings.STORAGE_SERVICE
-    if service == "local":
-        root = Path(settings.STORAGE_LOCAL_ROOT).resolve()
-        root.mkdir(parents=True, exist_ok=True)
-    elif service == "s3":
-        _get_s3_client(settings)
-    else:
-        raise ValueError(f"Unsupported STORAGE_SERVICE: {service}")
+    if not settings.STORAGE_S3_BUCKET:
+        raise ValueError("STORAGE_S3_BUCKET must be set")
+    client = _get_s3_client(settings)
+    if settings.STORAGE_S3_CREATE_BUCKET:
+        ensure_bucket(settings, client=client)
+
+
+def ensure_bucket(settings, client=None):
+    if not settings.STORAGE_S3_BUCKET:
+        raise ValueError("STORAGE_S3_BUCKET must be set")
+    client = client or _get_s3_client(settings)
+    return _ensure_s3_bucket(client, settings.STORAGE_S3_BUCKET, settings.STORAGE_S3_REGION)
 
 
 def store_file(upload: UploadFile, settings, filename=None):
-    service = settings.STORAGE_SERVICE
-    if service == "local":
-        return _store_local(upload, settings, filename)
-    if service == "s3":
-        return _store_s3(upload, settings, filename)
-    raise ValueError(f"Unsupported STORAGE_SERVICE: {service}")
-
-
-def local_file_response(key, settings):
-    if settings.STORAGE_SERVICE != "local":
-        raise HTTPException(status_code=404, detail="not found")
-
-    root = Path(settings.STORAGE_LOCAL_ROOT).resolve()
-    target_path = (root / key).resolve()
-    if root not in target_path.parents and target_path != root:
-        raise HTTPException(status_code=404, detail="not found")
-    if not target_path.exists() or not target_path.is_file():
-        raise HTTPException(status_code=404, detail="not found")
-    return FileResponse(target_path)
-
-
-def _store_local(upload, settings, filename=None):
-    root = Path(settings.STORAGE_LOCAL_ROOT).resolve()
-    safe_name = _build_filename(upload.filename, filename)
-    key = _build_key(safe_name)
-    target_path = root / key
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with target_path.open("wb") as handle:
-        upload.file.seek(0)
-        shutil.copyfileobj(upload.file, handle)
-
-    public_endpoint = settings.STORAGE_LOCAL_PUBLIC_ENDPOINT.rstrip("/")
-    public_url = f"{public_endpoint}/{quote(key)}"
-    return _file_result(key, safe_name, upload.content_type, target_path.stat().st_size, public_url)
+    return _store_s3(upload, settings, filename)
 
 
 def _store_s3(upload, settings, filename=None):
     bucket = settings.STORAGE_S3_BUCKET
     if not bucket:
-        raise ValueError("STORAGE_S3_BUCKET must be set when STORAGE_SERVICE=s3")
+        raise ValueError("STORAGE_S3_BUCKET must be set")
 
     safe_name = _build_filename(upload.filename, filename)
     key = _build_key(safe_name, settings.STORAGE_S3_PREFIX)
@@ -116,8 +85,39 @@ def _get_s3_client(settings):
 
     region = settings.STORAGE_S3_REGION or None
     endpoint = settings.STORAGE_S3_ENDPOINT or None
-    _storage_s3_client = boto3.client("s3", region_name=region, endpoint_url=endpoint)
+    access_key_id = settings.STORAGE_S3_ACCESS_KEY_ID or None
+    secret_access_key = settings.STORAGE_S3_SECRET_ACCESS_KEY or None
+    session_token = settings.STORAGE_S3_SESSION_TOKEN or None
+    client_config = BotoConfig(
+        signature_version=settings.STORAGE_S3_SIGNATURE_VERSION or "s3v4",
+        s3={"addressing_style": settings.STORAGE_S3_ADDRESSING_STYLE or "path"},
+    )
+    _storage_s3_client = boto3.client(
+        "s3",
+        region_name=region,
+        endpoint_url=endpoint,
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+        aws_session_token=session_token,
+        config=client_config,
+    )
     return _storage_s3_client
+
+
+def _ensure_s3_bucket(client, bucket, region=None):
+    try:
+        client.head_bucket(Bucket=bucket)
+    except ClientError as error:
+        status_code = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        error_code = error.response.get("Error", {}).get("Code")
+        if status_code == 404 or error_code in {"404", "NoSuchBucket", "NotFound"}:
+            create_args = {"Bucket": bucket}
+            if region and region != "us-east-1":
+                create_args["CreateBucketConfiguration"] = {"LocationConstraint": region}
+            client.create_bucket(**create_args)
+            return True
+        raise
+    return False
 
 
 def _file_result(key, filename, content_type, size, url):
