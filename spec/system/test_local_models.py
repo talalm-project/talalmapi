@@ -5,7 +5,7 @@ def test_local_models_requires_authentication(client):
 
 
 def test_local_models_returns_manifest_content_for_authenticated_user(client, app, user_auth_headers, tmp_path):
-    manifest_path = tmp_path / "manifest.yml"
+    manifest_path = tmp_path / "manifest-local-models.yml"
     manifest_path.write_text(
         """
 -

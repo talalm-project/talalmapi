@@ -47,6 +47,6 @@ Thumbs.db
 .vscode/
 
 # Ignore models
-manifest.yml
+manifest-local-models.yml
 models/*
 !models/.keep

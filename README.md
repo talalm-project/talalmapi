@@ -149,7 +149,32 @@ Useful development endpoints:
 - `GET /health`
 - `POST /login`
 - `/users` CRUD endpoints require an authenticated admin user
+- `GET /system/local_models` returns local GGUF models from the local manifest
 - `POST /uploads`
+
+## Local GGUF Model Manifest
+
+Local GGUF model files are not committed to the repository. Keep them under
+`talalmapi/models/` and describe them in a local manifest file named
+`manifest-local-models.yml`.
+
+Create the local manifest from the example:
+
+```bash
+cp manifest-local-models.yml.example manifest-local-models.yml
+```
+
+Each manifest entry has a display `name` and a `path` relative to the backend
+application directory:
+
+```yaml
+-
+  name: "Mistral 3.5"
+  path: "models/mistral.gguf"
+```
+
+The API reads this file for `GET /system/local_models`. To use a different
+location, set `LOCAL_MODELS_MANIFEST_PATH` in `talalmapi/.env`.
 
 ## File Uploads with RustFS
 
