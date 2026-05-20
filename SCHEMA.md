@@ -7,7 +7,7 @@ It is based on the SQLAlchemy models in `app/models`.
 
 - ORM: SQLAlchemy declarative models using `app.db.Base`
 - Migrations: Alembic revisions in `alembic/versions`
-- Current model tables: `users`
+- Current model tables: `users`, `connectors`
 
 ## Tables
 
@@ -42,7 +42,7 @@ Model: `app.models.user.User`
 
 #### Relationships
 
-- No foreign keys or ORM relationships are currently defined on `users`.
+- `users.id` is referenced by `connectors.user_id`.
 
 #### Application-Level Values
 
@@ -57,17 +57,54 @@ operations layer define the following application-level meanings:
 These values are enforced by application code, not by database enum or check
 constraints in the current model.
 
+### `connectors`
+
+Stores model connector configuration for a user.
+
+Model: `app.models.connector.Connector`
+
+| Column | Type | Nullable | Default | Constraints / Notes |
+| --- | --- | --- | --- | --- |
+| `id` | `String(36)` | No | Generated UUID string | Primary key |
+| `user_id` | `String(36)` | No | None | Foreign key to `users.id`, indexed |
+| `name` | `String(255)` | No | None | Connector display name |
+| `connection_type` | `String(50)` | No | None | Application-level values: `local`, `open-ai` |
+| `local_file_path` | `String(1024)` | Yes | None | Local GGUF file path |
+| `api_key` | `String(255)` | Yes | None | API key for remote connector types |
+| `data` | `JSONB` | No | `{}` | Metadata about the connector |
+| `created_at` | `DateTime(timezone=True)` | No | Current UTC datetime | Set by ORM on insert; migration has database default |
+| `updated_at` | `DateTime(timezone=True)` | No | Current UTC datetime | Set by ORM on insert and update; migration has insert default |
+
+#### Indexes
+
+| Name | Columns | Unique | Notes |
+| --- | --- | --- | --- |
+| `ix_connectors_user_id` | `user_id` | No | Supports user-scoped connector lookups |
+
+#### Primary Key
+
+- `connectors.id`
+
+#### Relationships
+
+- `connectors.user_id` references `users.id`.
+
+#### Application-Level Values
+
+The database stores `connection_type` as a string. The current model defines
+the following application-level values: `local` and `open-ai`.
+
 ## Migration Notes
 
-The Alembic history currently creates this schema in two revisions:
+The Alembic history currently creates this schema in three revisions:
 
 | Revision | Change |
 | --- | --- |
 | `0001_init` | Creates `users` with identity, email, password, name, status, and timestamp columns; creates the unique email index. |
 | `0002_add_role_to_users` | Adds the non-null `role` column with a database server default of `user`. |
+| `0003_create_connectors` | Creates `connectors` with a user foreign key, connector settings, timestamps, and JSONB metadata. |
 
 ## Current Schema Boundaries
 
-- There are no other SQLAlchemy models in `app/models`.
-- There are no join tables, foreign keys, or many-to-many relationships.
+- There are no join tables or many-to-many relationships.
 - Passwords are represented only by `password_hash`; raw passwords are not stored.

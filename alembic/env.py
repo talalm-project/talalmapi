@@ -9,7 +9,7 @@ from app.db import Base, db
 load_environment()
 
 from config import Config  # noqa: E402
-from app.models import user  # noqa: F401,E402
+from app.models import connector, user  # noqa: F401,E402
 
 
 config = context.config

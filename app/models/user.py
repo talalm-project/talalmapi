@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import DateTime, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
@@ -31,6 +31,7 @@ class User(Base):
         default=utcnow,
         onupdate=utcnow,
     )
+    connectors = relationship("Connector", back_populates="user")
 
     def full_name(self):
         return f"{self.last_name}, {self.first_name}"
