@@ -8,3 +8,8 @@ class LoginPayload(BaseModel):
 
 class LoginResponse(BaseModel):
     token: str
+
+
+class LocalModel(BaseModel):
+    name: str | None = None
+    path: str | None = None

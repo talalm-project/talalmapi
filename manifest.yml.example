@@ -1,0 +1,3 @@
+-
+  name: "Mistral 3.5"
+  path: "models/mistral.gguf"

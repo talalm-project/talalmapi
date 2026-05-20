@@ -60,3 +60,4 @@ class Config:
     STORAGE_S3_ADDRESSING_STYLE = os.getenv("STORAGE_S3_ADDRESSING_STYLE", "path")
     STORAGE_S3_CREATE_BUCKET = os.getenv("STORAGE_S3_CREATE_BUCKET", "false").lower() == "true"
     STORAGE_MAX_CONTENT_LENGTH_MB = int(os.getenv("STORAGE_MAX_CONTENT_LENGTH_MB", "100"))
+    LOCAL_MODELS_MANIFEST_PATH = os.getenv("LOCAL_MODELS_MANIFEST_PATH", "manifest.yml")

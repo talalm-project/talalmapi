@@ -4,11 +4,12 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.dependencies.auth import require_admin_user
+from app.dependencies.auth import get_current_user, require_admin_user
 from app.helpers.api_helpers import generate_jwt
 from app.models.user import User
 from app.operations.system.login import Login
-from app.schemas.system import LoginPayload, LoginResponse
+from app.schemas.system import LocalModel, LoginPayload, LoginResponse
+from app.services.local_models_service import LocalModelsService
 
 
 router = APIRouter()
@@ -73,3 +74,12 @@ def doctor(
             },
         },
     }
+
+
+@router.get("/system/local_models", response_model=list[LocalModel])
+def local_models(
+    request: Request,
+    _current_user: User = Depends(get_current_user),
+):
+    service = LocalModelsService(request.app.state.settings.LOCAL_MODELS_MANIFEST_PATH)
+    return service.list()

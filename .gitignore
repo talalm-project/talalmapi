@@ -45,3 +45,8 @@ storage_test/
 Thumbs.db
 .idea/
 .vscode/
+
+# Ignore models
+manifest.yml
+models/*
+!models/.keep
