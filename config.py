@@ -61,3 +61,7 @@ class Config:
     STORAGE_S3_CREATE_BUCKET = os.getenv("STORAGE_S3_CREATE_BUCKET", "false").lower() == "true"
     STORAGE_MAX_CONTENT_LENGTH_MB = int(os.getenv("STORAGE_MAX_CONTENT_LENGTH_MB", "100"))
     LOCAL_MODELS_MANIFEST_PATH = os.getenv("LOCAL_MODELS_MANIFEST_PATH", "manifest-local-models.yml")
+    INFERENCE_SYSTEM_PROMPT = os.getenv(
+        "INFERENCE_SYSTEM_PROMPT",
+        "You are a helpful assistant. Answer in Markdown. Keep the response complete and concise enough to fit within the configured maximum output tokens.",
+    )

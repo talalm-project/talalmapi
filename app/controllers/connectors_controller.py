@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -7,7 +7,8 @@ from app.db import get_db
 from app.dependencies.auth import require_active_user
 from app.models.connector import ALLOWED_CONNECTION_TYPES, Connector
 from app.models.user import User
-from app.schemas.connector import ConnectorCollection, ConnectorCreate, ConnectorOut, ConnectorUpdate
+from app.operations.connectors.infer import Infer
+from app.schemas.connector import ConnectorCollection, ConnectorCreate, ConnectorInfer, ConnectorOut, ConnectorUpdate
 
 
 router = APIRouter(prefix="/connectors", tags=["connectors"])
@@ -70,7 +71,7 @@ def create(
     if payload.name is None:
         errors["name"].append("required")
     connection_type = payload.connection_type or "local"
-    if connection_type == "open-ai" and _blank(payload.api_key):
+    if connection_type == "openai" and _blank(payload.api_key):
         errors["api_key"].append("required")
     code = payload.code.strip() if payload.code else None
     if code and _code_taken(session, current_user.id, code):
@@ -126,6 +127,26 @@ def show(
     return connector.to_dict()
 
 
+@router.post("/{connector_id}/infer")
+def infer(
+    request: Request,
+    connector_id: str,
+    payload: ConnectorInfer,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    connector = _visible_connector(session, connector_id, current_user)
+    if connector is None:
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    operation = Infer(connector, payload, system_prompt=request.app.state.settings.INFERENCE_SYSTEM_PROMPT)
+    operation.execute()
+    if not operation.valid():
+        return JSONResponse(status_code=422, content=operation.errors)
+
+    return operation.response
+
+
 @router.put("/{connector_id}", response_model=ConnectorOut)
 def update(
     connector_id: str,
@@ -145,7 +166,7 @@ def update(
 
     connection_type = payload.connection_type if payload.connection_type is not None else connector.connection_type
     api_key = payload.api_key if "api_key" in changed_fields else connector.api_key
-    if connection_type == "open-ai" and _blank(api_key):
+    if connection_type == "openai" and _blank(api_key):
         errors["api_key"].append("required")
     code = payload.code.strip() if payload.code is not None else connector.code
     if payload.code is not None and code and _code_taken(session, connector.user_id, code, connector.id):

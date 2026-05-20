@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -31,3 +33,10 @@ class ConnectorOut(BaseModel):
 
 class ConnectorCollection(BaseModel):
     records: list[ConnectorOut]
+
+
+class ConnectorInfer(BaseModel):
+    prompt: str | None = None
+    input: Any = None
+    model: str | None = None
+    options: dict = Field(default_factory=dict)

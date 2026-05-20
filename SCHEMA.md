@@ -69,7 +69,7 @@ Model: `app.models.connector.Connector`
 | `user_id` | `String(36)` | No | None | Foreign key to `users.id`, indexed |
 | `code` | `String(100)` | No | None | User-scoped connector identifier |
 | `name` | `String(255)` | No | None | Connector display name |
-| `connection_type` | `String(50)` | No | None | Application-level values: `local`, `open-ai` |
+| `connection_type` | `String(50)` | No | None | Application-level values: `local`, `openai` |
 | `local_file_path` | `String(1024)` | Yes | None | Local GGUF file path |
 | `api_key` | `String(255)` | Yes | None | API key for remote connector types |
 | `data` | `JSONB` | No | `{}` | Metadata about the connector |
@@ -94,11 +94,16 @@ Model: `app.models.connector.Connector`
 #### Application-Level Values
 
 The database stores `connection_type` as a string. The current model defines
-the following application-level values: `local` and `open-ai`.
+the following application-level values: `local` and `openai`.
+
+Connector inference is application behavior and does not add database columns.
+Local connector inference requires `local_file_path` to point to a `.gguf`
+model. OpenAI connector inference uses the connector `api_key`; the API never
+includes `api_key` in connector response payloads.
 
 ## Migration Notes
 
-The Alembic history currently creates this schema in four revisions:
+The Alembic history currently creates this schema in five revisions:
 
 | Revision | Change |
 | --- | --- |
@@ -106,6 +111,7 @@ The Alembic history currently creates this schema in four revisions:
 | `0002_add_role_to_users` | Adds the non-null `role` column with a database server default of `user`. |
 | `0003_create_connectors` | Creates `connectors` with a user foreign key, connector settings, timestamps, and JSONB metadata. |
 | `0004_add_code_to_connectors` | Adds user-scoped connector codes and a unique constraint on `user_id` plus `code`. |
+| `0005_rename_openai_type` | Renames the OpenAI connector value from `open-ai` to `openai`. |
 
 ## Current Schema Boundaries
 

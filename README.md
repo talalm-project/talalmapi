@@ -56,6 +56,8 @@ Important variables:
 - `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`: PostgreSQL settings
 - `DATABASE_URL`: optional full database URL override
 - `STORAGE_*`: RustFS file storage settings through the S3-compatible API
+- `LOCAL_MODELS_MANIFEST_PATH`: path to the local GGUF model manifest
+- `INFERENCE_SYSTEM_PROMPT`: global inference system prompt; defaults to Markdown answers
 - `AWS_ENDPOINT`: set to `http://localhost:4566` when developing against MiniStack
 - `SQS_QUEUE_URL`: queue URL for the SQS queue your app should use
 
@@ -150,6 +152,8 @@ Useful development endpoints:
 - `POST /login`
 - `/users` CRUD endpoints require an authenticated admin user
 - `GET /system/local_models` returns local GGUF models from the local manifest
+- `/connectors` CRUD endpoints manage local and OpenAI model connectors
+- `POST /connectors/{id}/infer` runs inference through a connector
 - `POST /uploads`
 
 ## Local GGUF Model Manifest
@@ -175,6 +179,68 @@ application directory:
 
 The API reads this file for `GET /system/local_models`. To use a different
 location, set `LOCAL_MODELS_MANIFEST_PATH` in `talalmapi/.env`.
+
+## Connector Inference
+
+Connectors support two application-level `connection_type` values:
+
+- `local`: uses `llama-cpp-python` against a local `.gguf` model file.
+- `openai`: uses the OpenAI Python SDK against the Responses API.
+
+Run inference with:
+
+```bash
+curl -X POST http://127.0.0.1:3000/connectors/<connector-id>/infer \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"input":[{"role":"user","content":"Explain vector databases"}]}'
+```
+
+Request body:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `prompt` | string | Convenience field for a single user prompt. |
+| `input` | string or array | For local connectors, string input becomes a user chat message and array input is passed as chat messages. For OpenAI connectors, this is passed to `responses.create`. |
+| `model` | string | Optional OpenAI model override. Defaults to the connector `name`. |
+| `options` | object | Additional SDK options passed to `create_chat_completion` for local connectors or `responses.create` for OpenAI connectors. |
+
+Local inference only accepts model paths ending in `.gguf`, case-insensitive.
+Local connectors use `create_chat_completion`, so instruction/chat GGUF models
+receive chat messages rather than raw completion prompts.
+
+Response body:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `response` | object | The complete SDK response returned by `llama-cpp-python` or the OpenAI SDK. |
+| `details` | object | Derived inference metrics. |
+
+`details` contains:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `prompt_tokens` | integer or null | Prompt/input token count when reported by the SDK. |
+| `completion_tokens` | integer or null | Completion/output token count when reported by the SDK. |
+| `total_tokens` | integer or null | Total token count when reported or derivable from prompt and completion counts. |
+| `finish_reason` | string or null | SDK finish reason when reported, such as `stop` or `length`. |
+| `elapsed_seconds` | number | Wall-clock time spent inside the SDK inference call. |
+| `tokens_per_second` | number or null | Completion tokens per second when completion tokens are known; otherwise total tokens per second when total tokens are known. |
+
+When local connector inference does not specify `options.max_tokens`, the API
+defaults to `1024` output tokens to reduce accidental mid-answer truncation.
+
+The global inference system prompt is configured through
+`INFERENCE_SYSTEM_PROMPT`. By default it is:
+
+```text
+You are a helpful assistant. Answer in Markdown. Keep the response complete and concise enough to fit within the configured maximum output tokens.
+```
+
+For local connectors, this prompt is prepended as a `system` message unless the
+request already includes a `system` or `developer` message. For OpenAI
+connectors, it is sent as `instructions` unless `options.instructions` is
+provided.
 
 ## File Uploads with RustFS
 

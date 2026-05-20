@@ -9,7 +9,7 @@ from app.db import Base
 from app.models.user import utcnow
 
 
-ALLOWED_CONNECTION_TYPES = {"local", "open-ai"}
+ALLOWED_CONNECTION_TYPES = {"local", "openai"}
 
 
 class Connector(Base):

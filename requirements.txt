@@ -13,3 +13,5 @@ python-multipart
 pytest
 factory_boy
 httpx
+llama-cpp-python
+openai

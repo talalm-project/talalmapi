@@ -60,7 +60,7 @@ def test_create_open_ai_connector_requires_api_key(client, app, db_session):
     response = client.post(
         "/connectors",
         headers=_headers(app, user),
-        json={"code": "gpt-4-1", "name": "gpt-4.1", "connection_type": "open-ai", "api_key": None},
+        json={"code": "gpt-4-1", "name": "gpt-4.1", "connection_type": "openai", "api_key": None},
     )
 
     assert response.status_code == 422
@@ -143,11 +143,11 @@ def test_list_connectors_filters_by_name(client, app, db_session):
 
 def test_list_connectors_filters_by_connection_type(client, app, db_session):
     user = UserFactory(role="user")
-    match = ConnectorFactory(user=user, name="OpenAI", connection_type="open-ai", local_file_path=None)
+    match = ConnectorFactory(user=user, name="OpenAI", connection_type="openai", local_file_path=None)
     ConnectorFactory(user=user, name="Local", connection_type="local")
-    ConnectorFactory(name="Other OpenAI", connection_type="open-ai", local_file_path=None)
+    ConnectorFactory(name="Other OpenAI", connection_type="openai", local_file_path=None)
 
-    response = client.get("/connectors?connection_type=open-ai", headers=_headers(app, user))
+    response = client.get("/connectors?connection_type=openai", headers=_headers(app, user))
 
     assert response.status_code == 200
     assert [record["id"] for record in response.json()["records"]] == [match.id]
@@ -155,12 +155,12 @@ def test_list_connectors_filters_by_connection_type(client, app, db_session):
 
 def test_list_connectors_filters_by_name_and_connection_type(client, app, db_session):
     user = UserFactory(role="user")
-    match = ConnectorFactory(user=user, name="Production OpenAI", connection_type="open-ai", local_file_path=None)
+    match = ConnectorFactory(user=user, name="Production OpenAI", connection_type="openai", local_file_path=None)
     ConnectorFactory(user=user, name="Production Local", connection_type="local")
-    ConnectorFactory(user=user, name="Staging OpenAI", connection_type="open-ai", local_file_path=None)
+    ConnectorFactory(user=user, name="Staging OpenAI", connection_type="openai", local_file_path=None)
 
     response = client.get(
-        "/connectors?name=production&connection_type=open-ai",
+        "/connectors?name=production&connection_type=openai",
         headers=_headers(app, user),
     )
 
@@ -262,7 +262,7 @@ def test_update_open_ai_connector_rejects_null_api_key(client, app, db_session):
     connector = ConnectorFactory(
         user=user,
         name="gpt-4.1",
-        connection_type="open-ai",
+        connection_type="openai",
         local_file_path=None,
         api_key="sk-existing",
     )
@@ -284,7 +284,7 @@ def test_update_open_ai_connector_allows_omitted_api_key(client, app, db_session
     connector = ConnectorFactory(
         user=user,
         name="gpt-4.1",
-        connection_type="open-ai",
+        connection_type="openai",
         local_file_path=None,
         api_key="sk-existing",
     )
@@ -307,7 +307,7 @@ def test_update_local_connector_to_open_ai_requires_api_key(client, app, db_sess
     response = client.put(
         f"/connectors/{connector.id}",
         headers=_headers(app, user),
-        json={"connection_type": "open-ai", "local_file_path": None},
+        json={"connection_type": "openai", "local_file_path": None},
     )
 
     assert response.status_code == 422
