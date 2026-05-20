@@ -26,6 +26,7 @@ class ConnectorFactory(factory.alchemy.SQLAlchemyModelFactory):
         sqlalchemy_session_persistence = "commit"
 
     user = factory.SubFactory(UserFactory)
+    code = factory.Sequence(lambda n: f"connector-{n}")
     name = factory.Sequence(lambda n: f"Connector {n}")
     connection_type = "local"
     local_file_path = factory.Sequence(lambda n: f"/tmp/models/model-{n}.gguf")

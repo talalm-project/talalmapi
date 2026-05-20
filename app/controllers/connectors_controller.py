@@ -15,11 +15,15 @@ router = APIRouter(prefix="/connectors", tags=["connectors"])
 
 def _validation_errors(payload):
     errors = {
+        "code": [],
         "name": [],
         "connection_type": [],
+        "api_key": [],
         "data": [],
     }
 
+    if payload.code is not None and not payload.code.strip():
+        errors["code"].append("required")
     if payload.name is not None and not payload.name.strip():
         errors["name"].append("required")
     if getattr(payload, "data", None) is not None and not isinstance(payload.data, dict):
@@ -28,6 +32,10 @@ def _validation_errors(payload):
         errors["connection_type"].append("invalid")
 
     return errors
+
+
+def _blank(value):
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def _has_errors(errors):
@@ -43,6 +51,13 @@ def _visible_connector(session, connector_id, current_user):
     return connector
 
 
+def _code_taken(session, user_id, code, connector_id=None):
+    stmt = select(Connector).where(Connector.user_id == user_id).where(Connector.code == code)
+    if connector_id is not None:
+        stmt = stmt.where(Connector.id != connector_id)
+    return session.scalar(stmt) is not None
+
+
 @router.post("", response_model=ConnectorOut, status_code=201)
 def create(
     payload: ConnectorCreate,
@@ -50,15 +65,24 @@ def create(
     session: Session = Depends(get_db),
 ):
     errors = _validation_errors(payload)
+    if payload.code is None:
+        errors["code"].append("required")
     if payload.name is None:
         errors["name"].append("required")
+    connection_type = payload.connection_type or "local"
+    if connection_type == "open-ai" and _blank(payload.api_key):
+        errors["api_key"].append("required")
+    code = payload.code.strip() if payload.code else None
+    if code and _code_taken(session, current_user.id, code):
+        errors["code"].append("already taken")
     if _has_errors(errors):
         return JSONResponse(status_code=422, content=errors)
 
     connector = Connector(
         user_id=current_user.id,
+        code=code,
         name=payload.name,
-        connection_type=payload.connection_type or "local",
+        connection_type=connection_type,
         local_file_path=payload.local_file_path,
         api_key=payload.api_key,
         data=payload.data,
@@ -114,14 +138,23 @@ def update(
         return JSONResponse(status_code=404, content={"message": "not found"})
 
     errors = _validation_errors(payload)
-    if _has_errors(errors):
-        return JSONResponse(status_code=422, content=errors)
-
     if hasattr(payload, "model_fields_set"):
         changed_fields = payload.model_fields_set
     else:
         changed_fields = payload.__fields_set__
 
+    connection_type = payload.connection_type if payload.connection_type is not None else connector.connection_type
+    api_key = payload.api_key if "api_key" in changed_fields else connector.api_key
+    if connection_type == "open-ai" and _blank(api_key):
+        errors["api_key"].append("required")
+    code = payload.code.strip() if payload.code is not None else connector.code
+    if payload.code is not None and code and _code_taken(session, connector.user_id, code, connector.id):
+        errors["code"].append("already taken")
+    if _has_errors(errors):
+        return JSONResponse(status_code=422, content=errors)
+
+    if payload.code is not None:
+        connector.code = code
     if payload.name is not None:
         connector.name = payload.name
     if payload.connection_type is not None:

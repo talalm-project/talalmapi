@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 
 
 class ConnectorCreate(BaseModel):
+    code: str | None = None
     name: str | None = None
     connection_type: str | None = None
     local_file_path: str | None = None
@@ -10,6 +11,7 @@ class ConnectorCreate(BaseModel):
 
 
 class ConnectorUpdate(BaseModel):
+    code: str | None = None
     name: str | None = None
     connection_type: str | None = None
     local_file_path: str | None = None
@@ -20,6 +22,7 @@ class ConnectorUpdate(BaseModel):
 class ConnectorOut(BaseModel):
     id: str
     user_id: str
+    code: str
     name: str
     connection_type: str
     local_file_path: str | None = None

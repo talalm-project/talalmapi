@@ -6,6 +6,7 @@ def test_connector_factory_creates_connector(db_session):
 
     assert connector.id is not None
     assert connector.user_id == connector.user.id
+    assert connector.code.startswith("connector-")
     assert connector.name.startswith("Connector ")
     assert connector.connection_type == "local"
     assert connector.local_file_path.endswith(".gguf")
@@ -21,6 +22,7 @@ def test_connector_to_dict_returns_public_fields(db_session):
     assert connector.to_dict() == {
         "id": connector.id,
         "user_id": connector.user_id,
+        "code": connector.code,
         "name": connector.name,
         "connection_type": connector.connection_type,
         "local_file_path": connector.local_file_path,

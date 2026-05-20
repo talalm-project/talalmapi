@@ -15,6 +15,7 @@ def test_create_connector_assigns_current_user(client, app, db_session):
         "/connectors",
         headers=_headers(app, user),
         json={
+            "code": "local-llama",
             "name": "Local Llama",
             "connection_type": "local",
             "local_file_path": "/tmp/llama.gguf",
@@ -26,6 +27,7 @@ def test_create_connector_assigns_current_user(client, app, db_session):
     assert response.status_code == 201
     payload = response.json()
     assert payload["name"] == "Local Llama"
+    assert payload["code"] == "local-llama"
     assert payload["user_id"] == user.id
     assert "api_key" not in payload
 
@@ -37,7 +39,7 @@ def test_create_connector_assigns_current_user(client, app, db_session):
 def test_create_connector_requires_name(client, app, db_session):
     user = UserFactory(role="user")
 
-    response = client.post("/connectors", headers=_headers(app, user), json={"connection_type": "local"})
+    response = client.post("/connectors", headers=_headers(app, user), json={"code": "missing-name", "connection_type": "local"})
 
     assert response.status_code == 422
     assert response.json()["name"] == ["required"]
@@ -46,10 +48,63 @@ def test_create_connector_requires_name(client, app, db_session):
 def test_create_connector_defaults_connection_type_to_local(client, app, db_session):
     user = UserFactory(role="user")
 
-    response = client.post("/connectors", headers=_headers(app, user), json={"name": "Default"})
+    response = client.post("/connectors", headers=_headers(app, user), json={"code": "default", "name": "Default"})
 
     assert response.status_code == 201
     assert response.json()["connection_type"] == "local"
+
+
+def test_create_open_ai_connector_requires_api_key(client, app, db_session):
+    user = UserFactory(role="user")
+
+    response = client.post(
+        "/connectors",
+        headers=_headers(app, user),
+        json={"code": "gpt-4-1", "name": "gpt-4.1", "connection_type": "open-ai", "api_key": None},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["api_key"] == ["required"]
+
+
+def test_create_connector_requires_code(client, app, db_session):
+    user = UserFactory(role="user")
+
+    response = client.post("/connectors", headers=_headers(app, user), json={"name": "No Code"})
+
+    assert response.status_code == 422
+    assert response.json()["code"] == ["required"]
+
+
+def test_create_connector_requires_unique_code_per_user(client, app, db_session):
+    user = UserFactory(role="user")
+    other_user = UserFactory(role="user")
+    ConnectorFactory(user=user, code="shared")
+    ConnectorFactory(user=other_user, code="shared")
+
+    response = client.post(
+        "/connectors",
+        headers=_headers(app, user),
+        json={"code": "shared", "name": "Duplicate", "connection_type": "local"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == ["already taken"]
+
+
+def test_create_connector_allows_same_code_for_different_users(client, app, db_session):
+    user = UserFactory(role="user")
+    other_user = UserFactory(role="user")
+    ConnectorFactory(user=other_user, code="shared")
+
+    response = client.post(
+        "/connectors",
+        headers=_headers(app, user),
+        json={"code": "shared", "name": "Shared", "connection_type": "local"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["code"] == "shared"
 
 
 def test_list_connectors_only_returns_current_users_connectors(client, app, db_session):
@@ -148,12 +203,13 @@ def test_update_connector_allows_owner(client, app, db_session):
     response = client.put(
         f"/connectors/{connector.id}",
         headers=_headers(app, user),
-        json={"name": "Updated", "local_file_path": None, "data": {"model": "mistral"}},
+        json={"code": "updated-code", "name": "Updated", "local_file_path": None, "data": {"model": "mistral"}},
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["name"] == "Updated"
+    assert payload["code"] == "updated-code"
     assert payload["local_file_path"] is None
     assert payload["data"] == {"model": "mistral"}
 
@@ -184,6 +240,78 @@ def test_admin_can_update_other_users_connector(client, auth_headers, db_session
 
     assert response.status_code == 200
     assert response.json()["name"] == "Updated"
+
+
+def test_update_connector_rejects_duplicate_code_for_same_user(client, app, db_session):
+    user = UserFactory(role="user")
+    ConnectorFactory(user=user, code="taken")
+    connector = ConnectorFactory(user=user, code="original")
+
+    response = client.put(
+        f"/connectors/{connector.id}",
+        headers=_headers(app, user),
+        json={"code": "taken"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == ["already taken"]
+
+
+def test_update_open_ai_connector_rejects_null_api_key(client, app, db_session):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(
+        user=user,
+        name="gpt-4.1",
+        connection_type="open-ai",
+        local_file_path=None,
+        api_key="sk-existing",
+    )
+
+    response = client.put(
+        f"/connectors/{connector.id}",
+        headers=_headers(app, user),
+        json={"api_key": None},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["api_key"] == ["required"]
+    db_session.refresh(connector)
+    assert connector.api_key == "sk-existing"
+
+
+def test_update_open_ai_connector_allows_omitted_api_key(client, app, db_session):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(
+        user=user,
+        name="gpt-4.1",
+        connection_type="open-ai",
+        local_file_path=None,
+        api_key="sk-existing",
+    )
+
+    response = client.put(
+        f"/connectors/{connector.id}",
+        headers=_headers(app, user),
+        json={"name": "gpt-4.1-mini"},
+    )
+
+    assert response.status_code == 200
+    db_session.refresh(connector)
+    assert connector.api_key == "sk-existing"
+
+
+def test_update_local_connector_to_open_ai_requires_api_key(client, app, db_session):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user, connection_type="local", api_key=None)
+
+    response = client.put(
+        f"/connectors/{connector.id}",
+        headers=_headers(app, user),
+        json={"connection_type": "open-ai", "local_file_path": None},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["api_key"] == ["required"]
 
 
 def test_delete_connector_allows_owner(client, app, db_session):

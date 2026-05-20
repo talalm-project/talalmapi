@@ -67,6 +67,7 @@ Model: `app.models.connector.Connector`
 | --- | --- | --- | --- | --- |
 | `id` | `String(36)` | No | Generated UUID string | Primary key |
 | `user_id` | `String(36)` | No | None | Foreign key to `users.id`, indexed |
+| `code` | `String(100)` | No | None | User-scoped connector identifier |
 | `name` | `String(255)` | No | None | Connector display name |
 | `connection_type` | `String(50)` | No | None | Application-level values: `local`, `open-ai` |
 | `local_file_path` | `String(1024)` | Yes | None | Local GGUF file path |
@@ -80,6 +81,7 @@ Model: `app.models.connector.Connector`
 | Name | Columns | Unique | Notes |
 | --- | --- | --- | --- |
 | `ix_connectors_user_id` | `user_id` | No | Supports user-scoped connector lookups |
+| `uq_connectors_user_id_code` | `user_id`, `code` | Yes | Enforces unique connector codes per user |
 
 #### Primary Key
 
@@ -96,13 +98,14 @@ the following application-level values: `local` and `open-ai`.
 
 ## Migration Notes
 
-The Alembic history currently creates this schema in three revisions:
+The Alembic history currently creates this schema in four revisions:
 
 | Revision | Change |
 | --- | --- |
 | `0001_init` | Creates `users` with identity, email, password, name, status, and timestamp columns; creates the unique email index. |
 | `0002_add_role_to_users` | Adds the non-null `role` column with a database server default of `user`. |
 | `0003_create_connectors` | Creates `connectors` with a user foreign key, connector settings, timestamps, and JSONB metadata. |
+| `0004_add_code_to_connectors` | Adds user-scoped connector codes and a unique constraint on `user_id` plus `code`. |
 
 ## Current Schema Boundaries
 
