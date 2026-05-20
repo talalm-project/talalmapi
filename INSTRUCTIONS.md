@@ -5,6 +5,7 @@
 - Write tests first before implementing a feature or changing behavior.
 - Add or update the relevant spec under `spec/` first, confirm the failure, then implement the code.
 - Keep controllers thin and move business logic into command objects under `app/operations`.
+- Create, update, and other state-changing workflows should be implemented as operation/command objects rather than inline controller logic.
 
 ## Models
 
@@ -25,6 +26,7 @@
 - Reuse auth dependencies like `require_active_user` for protected endpoints.
 - Register new routers in `app/routes.py`.
 - When an endpoint performs business rules, validation, creation, updates, or other domain behavior, delegate that work to an operation instead of embedding it in the controller.
+- For create and update endpoints, controllers should only gather the payload, current user, session, and target record, then call the matching operation.
 
 ## Operations
 
@@ -33,6 +35,8 @@
 - Operation objects should receive their dependencies and inputs in `__init__`, expose `execute()`, and store results on the instance such as `user` or `payload`.
 - For validation-oriented commands, inherit from `Validator`, populate `payload`, and use `valid()` or `invalid()` after `execute()`.
 - Controllers should instantiate the command, call `execute()`, and translate the result into the HTTP response.
+- Save-style operations should own validation, uniqueness checks, default values, field assignment, persistence, commit, and refresh behavior for their domain object.
+- When both create and update share rules for a model, prefer one `Save` operation that accepts an optional existing record, following `app/operations/users/save.py`.
 
 ## Tests
 

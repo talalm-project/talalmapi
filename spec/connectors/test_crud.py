@@ -257,6 +257,22 @@ def test_update_connector_rejects_duplicate_code_for_same_user(client, app, db_s
     assert response.json()["code"] == ["already taken"]
 
 
+def test_update_connector_ignores_null_data(client, app, db_session):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user, data={"model": "llama"})
+
+    response = client.put(
+        f"/connectors/{connector.id}",
+        headers=_headers(app, user),
+        json={"data": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"model": "llama"}
+    db_session.refresh(connector)
+    assert connector.data == {"model": "llama"}
+
+
 def test_update_open_ai_connector_rejects_null_api_key(client, app, db_session):
     user = UserFactory(role="user")
     connector = ConnectorFactory(
