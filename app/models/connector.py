@@ -27,6 +27,8 @@ class Connector(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     connection_type: Mapped[str] = mapped_column(String(50), nullable=False)
     local_file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    embedding_local_file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    embedding_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
@@ -47,5 +49,7 @@ class Connector(Base):
             "name": self.name,
             "connection_type": self.connection_type,
             "local_file_path": self.local_file_path,
+            "embedding_local_file_path": self.embedding_local_file_path,
+            "embedding_name": self.embedding_name,
             "data": self.data,
         }

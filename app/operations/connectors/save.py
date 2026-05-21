@@ -1,6 +1,7 @@
 from sqlalchemy import select
 
 from app.models.connector import ALLOWED_CONNECTION_TYPES, Connector
+from app.operations.connectors.metadata import build_connector_data
 from app.operations.validator import Validator
 
 
@@ -13,6 +14,8 @@ class Save(Validator):
         name=None,
         connection_type=None,
         local_file_path=None,
+        embedding_local_file_path=None,
+        embedding_name=None,
         api_key=None,
         data=None,
         changed_fields=None,
@@ -26,6 +29,8 @@ class Save(Validator):
         self.name = name
         self.connection_type = connection_type
         self.local_file_path = local_file_path
+        self.embedding_local_file_path = embedding_local_file_path
+        self.embedding_name = embedding_name
         self.api_key = api_key
         self.data = data
         self.changed_fields = changed_fields or set()
@@ -42,14 +47,24 @@ class Save(Validator):
 
         if self.valid():
             if self.connector is None:
+                connector_attrs = {
+                    "code": self._normalized_code(),
+                    "name": self.name,
+                    "connection_type": self._connection_type(),
+                    "local_file_path": self.local_file_path,
+                    "embedding_local_file_path": self.embedding_local_file_path,
+                    "embedding_name": self.embedding_name,
+                }
                 self.connector = Connector(
                     user_id=self.user.id,
                     code=self._normalized_code(),
                     name=self.name,
                     connection_type=self._connection_type(),
                     local_file_path=self.local_file_path,
+                    embedding_local_file_path=self.embedding_local_file_path,
+                    embedding_name=self.embedding_name,
                     api_key=self.api_key,
-                    data=self.data,
+                    data=build_connector_data(connector_attrs, self.data),
                 )
                 self.session.add(self.connector)
             else:
@@ -94,10 +109,17 @@ class Save(Validator):
             self.connector.connection_type = self.connection_type
         if "local_file_path" in self.changed_fields:
             self.connector.local_file_path = self.local_file_path
+        if "embedding_local_file_path" in self.changed_fields:
+            self.connector.embedding_local_file_path = self.embedding_local_file_path
+        if "embedding_name" in self.changed_fields:
+            self.connector.embedding_name = self.embedding_name
         if "api_key" in self.changed_fields:
             self.connector.api_key = self.api_key
+
+        data = self.connector.data or {}
         if "data" in self.changed_fields and self.data is not None:
-            self.connector.data = self.data
+            data = self.data
+        self.connector.data = build_connector_data(self.connector, data)
 
     def _connection_type(self):
         if self.connector is None:

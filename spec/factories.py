@@ -30,5 +30,7 @@ class ConnectorFactory(factory.alchemy.SQLAlchemyModelFactory):
     name = factory.Sequence(lambda n: f"Connector {n}")
     connection_type = "local"
     local_file_path = factory.Sequence(lambda n: f"/tmp/models/model-{n}.gguf")
+    embedding_local_file_path = factory.Sequence(lambda n: f"/tmp/models/embedding-{n}.gguf")
+    embedding_name = factory.Sequence(lambda n: f"Embedding {n}")
     api_key = None
     data = factory.Dict({})

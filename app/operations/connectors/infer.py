@@ -1,5 +1,12 @@
 from time import perf_counter
 
+from app.operations.connectors.metadata import (
+    inference_default_output_tokens,
+    inference_local_file_path,
+    inference_model_name,
+    inference_model_options,
+)
+
 
 DEFAULT_LOCAL_MAX_TOKENS = 1024
 
@@ -37,9 +44,10 @@ class Infer:
             errors["options"] = ["invalid"]
 
         if self.connector.connection_type == "local":
-            if not self.connector.local_file_path:
+            local_file_path = inference_local_file_path(self.connector)
+            if not local_file_path:
                 errors["local_file_path"] = ["required"]
-            elif not self.connector.local_file_path.lower().endswith(".gguf"):
+            elif not local_file_path.lower().endswith(".gguf"):
                 errors["local_file_path"] = ["must be a .gguf model"]
             if self.payload.input is not None and not isinstance(self.payload.input, (str, list)):
                 errors["input"] = ["invalid"]
@@ -57,10 +65,10 @@ class Infer:
         return errors
 
     def _infer_local(self):
-        model_options = self.connector.data.get("model_options", {})
+        model_options = inference_model_options(self.connector)
         llama_class = _llama_class()
-        llm = llama_class(model_path=self.connector.local_file_path, **model_options)
-        options = {"max_tokens": DEFAULT_LOCAL_MAX_TOKENS, **self.payload.options}
+        llm = llama_class(model_path=inference_local_file_path(self.connector), **model_options)
+        options = {"max_tokens": inference_default_output_tokens(self.connector, DEFAULT_LOCAL_MAX_TOKENS), **self.payload.options}
         started_at = perf_counter()
         response = llm.create_chat_completion(messages=self._local_messages(), **options)
         return _response_with_details(response, perf_counter() - started_at)
@@ -73,7 +81,9 @@ class Infer:
             options["instructions"] = self.system_prompt
 
         started_at = perf_counter()
-        response = _serialize_response(client.responses.create(model=self.payload.model or self.connector.name, input=self._openai_input(), **options))
+        response = _serialize_response(
+            client.responses.create(model=self.payload.model or inference_model_name(self.connector), input=self._openai_input(), **options)
+        )
         return _response_with_details(response, perf_counter() - started_at)
 
     def _local_prompt(self):

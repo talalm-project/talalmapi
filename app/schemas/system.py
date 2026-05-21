@@ -14,5 +14,5 @@ class LoginResponse(BaseModel):
 
 class LocalModel(BaseModel):
     name: str | None = None
-    type: Literal["inference", "embeddings"] | None = None
+    type: Literal["inference", "embedding", "embeddings"] | None = None
     path: str | None = None

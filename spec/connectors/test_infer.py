@@ -82,6 +82,45 @@ def test_infer_local_connector_sets_default_max_tokens(client, app, db_session, 
     assert captured["completion"]["max_tokens"] == 1024
 
 
+def test_infer_local_connector_uses_metadata_model_path_and_limits(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(
+        user=user,
+        connection_type="local",
+        local_file_path="/tmp/column-model.gguf",
+        data={
+            "metadata": {
+                "inference": {
+                    "model": {"name": "Metadata Model", "local_file_path": "/tmp/metadata-model.gguf"},
+                    "model_options": {"n_ctx": 2048},
+                    "limits": {"default_output_tokens": 64},
+                }
+            }
+        },
+    )
+    captured = {}
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            captured["init"] = kwargs
+
+        def create_chat_completion(self, **kwargs):
+            captured["completion"] = kwargs
+            return {"ok": True}
+
+    monkeypatch.setattr("app.operations.connectors.infer._llama_class", lambda: FakeLlama)
+
+    response = client.post(
+        f"/connectors/{connector.id}/infer",
+        headers=_headers(app, user),
+        json={"input": "Say hello"},
+    )
+
+    assert response.status_code == 200
+    assert captured["init"] == {"model_path": "/tmp/metadata-model.gguf", "n_ctx": 2048}
+    assert captured["completion"]["max_tokens"] == 64
+
+
 def test_infer_local_connector_accepts_string_input_as_prompt(client, app, db_session, monkeypatch):
     user = UserFactory(role="user")
     connector = ConnectorFactory(user=user, connection_type="local", local_file_path="/tmp/model.gguf")
@@ -259,6 +298,39 @@ def test_infer_openai_connector_allows_request_model_override(client, app, db_se
     assert response.status_code == 200
     assert response.json()["response"] == {"ok": True}
     assert captured["create"]["model"] == "gpt-4.1-mini"
+
+
+def test_infer_openai_connector_uses_metadata_model_name(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(
+        user=user,
+        name="column-model",
+        connection_type="openai",
+        local_file_path=None,
+        api_key="sk-secret",
+        data={"metadata": {"inference": {"model": {"name": "metadata-model", "local_file_path": None}}}},
+    )
+    captured = {}
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            captured["create"] = kwargs
+            return {"ok": True}
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr("app.operations.connectors.infer._openai_client_class", lambda: FakeOpenAI)
+
+    response = client.post(
+        f"/connectors/{connector.id}/infer",
+        headers=_headers(app, user),
+        json={"input": "Say hello"},
+    )
+
+    assert response.status_code == 200
+    assert captured["create"]["model"] == "metadata-model"
 
 
 def test_infer_connector_requires_visible_connector(client, app, db_session):

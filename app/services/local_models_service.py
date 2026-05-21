@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 
 
-ALLOWED_LOCAL_MODEL_TYPES = {"inference", "embeddings"}
+ALLOWED_LOCAL_MODEL_TYPES = {"inference", "embedding", "embeddings"}
 
 
 class LocalModelsService:

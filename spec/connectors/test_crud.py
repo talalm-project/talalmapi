@@ -19,6 +19,8 @@ def test_create_connector_assigns_current_user(client, app, db_session):
             "name": "Local Llama",
             "connection_type": "local",
             "local_file_path": "/tmp/llama.gguf",
+            "embedding_local_file_path": "/tmp/nomic-embed.gguf",
+            "embedding_name": "nomic-embed-text",
             "api_key": "sk-secret",
             "data": {"model": "llama"},
         },
@@ -29,10 +31,27 @@ def test_create_connector_assigns_current_user(client, app, db_session):
     assert payload["name"] == "Local Llama"
     assert payload["code"] == "local-llama"
     assert payload["user_id"] == user.id
+    assert payload["embedding_local_file_path"] == "/tmp/nomic-embed.gguf"
+    assert payload["embedding_name"] == "nomic-embed-text"
+    assert payload["data"]["model"] == "llama"
+    assert payload["data"]["metadata"]["schema_version"] == 1
+    assert payload["data"]["metadata"]["provider"] == "local"
+    assert payload["data"]["metadata"]["inference"]["model"] == {
+        "name": "Local Llama",
+        "local_file_path": "/tmp/llama.gguf",
+    }
+    assert payload["data"]["metadata"]["embeddings"]["model"] == {
+        "name": "nomic-embed-text",
+        "local_file_path": "/tmp/nomic-embed.gguf",
+        "embedding_size": None,
+    }
+    assert payload["data"]["metadata"]["embeddings"]["limits"]["max_input_tokens"] == 256
     assert "api_key" not in payload
 
     connector = db_session.get(Connector, payload["id"])
     assert connector.user_id == user.id
+    assert connector.embedding_local_file_path == "/tmp/nomic-embed.gguf"
+    assert connector.embedding_name == "nomic-embed-text"
     assert connector.api_key == "sk-secret"
 
 
@@ -65,6 +84,37 @@ def test_create_open_ai_connector_requires_api_key(client, app, db_session):
 
     assert response.status_code == 422
     assert response.json()["api_key"] == ["required"]
+
+
+def test_create_open_ai_connector_builds_embedding_metadata(client, app, db_session):
+    user = UserFactory(role="user")
+
+    response = client.post(
+        "/connectors",
+        headers=_headers(app, user),
+        json={
+            "code": "openai-embeddings",
+            "name": "gpt-4.1",
+            "connection_type": "openai",
+            "embedding_name": "text-embedding-3-small",
+            "api_key": "sk-secret",
+        },
+    )
+
+    assert response.status_code == 201
+    metadata = response.json()["data"]["metadata"]
+    assert metadata["provider"] == "openai"
+    assert metadata["inference"]["model"] == {
+        "name": "gpt-4.1",
+        "local_file_path": None,
+    }
+    assert metadata["embeddings"]["model"] == {
+        "name": "text-embedding-3-small",
+        "local_file_path": None,
+        "embedding_size": 1536,
+    }
+    assert metadata["embeddings"]["limits"]["max_input_tokens"] == 8191
+    assert metadata["embeddings"]["chunking"]["strategy"] == "text-with-token-safety"
 
 
 def test_create_connector_requires_code(client, app, db_session):
@@ -203,7 +253,14 @@ def test_update_connector_allows_owner(client, app, db_session):
     response = client.put(
         f"/connectors/{connector.id}",
         headers=_headers(app, user),
-        json={"code": "updated-code", "name": "Updated", "local_file_path": None, "data": {"model": "mistral"}},
+        json={
+            "code": "updated-code",
+            "name": "Updated",
+            "local_file_path": None,
+            "embedding_local_file_path": "/tmp/e5.gguf",
+            "embedding_name": "e5-small",
+            "data": {"model": "mistral"},
+        },
     )
 
     assert response.status_code == 200
@@ -211,7 +268,14 @@ def test_update_connector_allows_owner(client, app, db_session):
     assert payload["name"] == "Updated"
     assert payload["code"] == "updated-code"
     assert payload["local_file_path"] is None
-    assert payload["data"] == {"model": "mistral"}
+    assert payload["embedding_local_file_path"] == "/tmp/e5.gguf"
+    assert payload["embedding_name"] == "e5-small"
+    assert payload["data"]["model"] == "mistral"
+    assert payload["data"]["metadata"]["embeddings"]["model"] == {
+        "name": "e5-small",
+        "local_file_path": "/tmp/e5.gguf",
+        "embedding_size": None,
+    }
 
 
 def test_update_connector_blocks_other_user(client, app, db_session):
@@ -268,9 +332,11 @@ def test_update_connector_ignores_null_data(client, app, db_session):
     )
 
     assert response.status_code == 200
-    assert response.json()["data"] == {"model": "llama"}
+    assert response.json()["data"]["model"] == "llama"
+    assert response.json()["data"]["metadata"]["provider"] == "local"
     db_session.refresh(connector)
-    assert connector.data == {"model": "llama"}
+    assert connector.data["model"] == "llama"
+    assert connector.data["metadata"]["provider"] == "local"
 
 
 def test_update_open_ai_connector_rejects_null_api_key(client, app, db_session):

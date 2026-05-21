@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, Request
+import shutil
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -7,8 +11,11 @@ from app.db import get_db
 from app.dependencies.auth import require_active_user
 from app.models.connector import Connector
 from app.models.user import User
+from app.operations.connectors.metadata import embedding_chunk_options, embedding_max_input_tokens, embedding_model_options
 from app.operations.connectors.infer import Infer
 from app.operations.connectors.save import Save
+from app.operations.embeddings.generate_local_embeddings import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE
+from app.operations.embeddings import GenerateLocalEmbeddings, GenerateOpenAIEmbeddings
 from app.schemas.connector import ConnectorCollection, ConnectorCreate, ConnectorInfer, ConnectorOut, ConnectorUpdate
 
 
@@ -37,6 +44,8 @@ def create(
         name=payload.name,
         connection_type=payload.connection_type,
         local_file_path=payload.local_file_path,
+        embedding_local_file_path=payload.embedding_local_file_path,
+        embedding_name=payload.embedding_name,
         api_key=payload.api_key,
         data=payload.data,
     )
@@ -99,6 +108,50 @@ def infer(
     return operation.response
 
 
+@router.post("/{connector_id}/generate_embeddings")
+def generate_embeddings(
+    connector_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    connector = _visible_connector(session, connector_id, current_user)
+    if connector is None:
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    input_path = _save_upload_to_temp_file(file)
+    try:
+        chunk_size, chunk_overlap = embedding_chunk_options(connector, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP)
+        if connector.connection_type == "local":
+            operation = GenerateLocalEmbeddings(
+                local_embedding_model=connector,
+                input_file=input_path,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                model_options=embedding_model_options(connector),
+                max_input_tokens=embedding_max_input_tokens(connector),
+                source_name=file.filename,
+            )
+        elif connector.connection_type == "openai":
+            operation = GenerateOpenAIEmbeddings(
+                connector=connector,
+                input_file=input_path,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                source_name=file.filename,
+            )
+        else:
+            return JSONResponse(status_code=422, content={"connection_type": ["unsupported"]})
+
+        operation.execute()
+        if operation.invalid():
+            return JSONResponse(status_code=422, content=operation.errors)
+
+        return {"records": operation.embeddings}
+    finally:
+        input_path.unlink(missing_ok=True)
+
+
 @router.put("/{connector_id}", response_model=ConnectorOut)
 def update(
     connector_id: str,
@@ -123,6 +176,8 @@ def update(
         name=payload.name,
         connection_type=payload.connection_type,
         local_file_path=payload.local_file_path,
+        embedding_local_file_path=payload.embedding_local_file_path,
+        embedding_name=payload.embedding_name,
         api_key=payload.api_key,
         data=payload.data,
         changed_fields=changed_fields,
@@ -147,3 +202,11 @@ def delete(
     session.delete(connector)
     session.commit()
     return {"message": "ok"}
+
+
+def _save_upload_to_temp_file(file):
+    suffix = Path(file.filename or "").suffix
+    with NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        file.file.seek(0)
+        shutil.copyfileobj(file.file, temp_file)
+        return Path(temp_file.name)

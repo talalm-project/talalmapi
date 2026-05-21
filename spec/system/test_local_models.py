@@ -16,6 +16,10 @@ def test_local_models_returns_manifest_content_for_authenticated_user(client, ap
   name: "Llama"
   type: "embeddings"
   path: "models/llama.gguf"
+-
+  name: "Qwen Embedding"
+  type: "embedding"
+  path: "models/qwen-embedding.gguf"
 """.strip(),
         encoding="utf-8",
     )
@@ -27,6 +31,7 @@ def test_local_models_returns_manifest_content_for_authenticated_user(client, ap
     assert response.json() == [
         {"name": "Mistral 3.5", "type": "inference", "path": "models/mistral.gguf"},
         {"name": "Llama", "type": "embeddings", "path": "models/llama.gguf"},
+        {"name": "Qwen Embedding", "type": "embedding", "path": "models/qwen-embedding.gguf"},
     ]
 
 

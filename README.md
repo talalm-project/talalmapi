@@ -168,8 +168,8 @@ Create the local manifest from the example:
 cp manifest-local-models.yml.example manifest-local-models.yml
 ```
 
-Each manifest entry has a display `name`, a `type` (`inference` or
-`embeddings`), and a `path` relative to the backend application directory:
+Each manifest entry has a display `name`, a `type` (`inference`, `embedding`,
+or `embeddings`), and a `path` relative to the backend application directory:
 
 ```yaml
 -
@@ -180,6 +180,87 @@ Each manifest entry has a display `name`, a `type` (`inference` or
 
 The API reads this file for `GET /system/local_models`. To use a different
 location, set `LOCAL_MODELS_MANIFEST_PATH` in `talalmapi/.env`.
+
+## Connectors
+
+Connectors store provider-specific runtime settings in the `data` JSON
+attribute. Caller-provided keys are preserved, and the backend adds a normalized
+`data.metadata` object during connector creation and update. Inference and
+embedding generation read from this metadata first, while older top-level keys
+such as `model_options` and `embedding_model_options` remain supported as
+fallbacks.
+
+Standard `data.metadata` shape:
+
+```json
+{
+  "schema_version": 1,
+  "provider": "local",
+  "inference": {
+    "model": {
+      "name": "Mistral 3.5",
+      "local_file_path": "models/mistral.gguf"
+    },
+    "model_options": {
+      "n_ctx": 4096
+    },
+    "limits": {
+      "context_window_tokens": 4096,
+      "max_input_tokens": 4096,
+      "default_output_tokens": 1024
+    }
+  },
+  "embeddings": {
+    "model": {
+      "name": "Qwen Embedding",
+      "local_file_path": "models/qwen-embedding.gguf",
+      "embedding_size": 1024
+    },
+    "model_options": {
+      "n_ctx": 65536,
+      "n_batch": 512
+    },
+    "limits": {
+      "context_window_tokens": 65536,
+      "max_input_tokens": 256,
+      "max_content_tokens": 255,
+      "ideal_chunk_tokens": 191
+    },
+    "chunking": {
+      "strategy": "text-with-token-safety",
+      "unit": "characters",
+      "chunk_size": 764,
+      "chunk_overlap": 76
+    }
+  }
+}
+```
+
+For `local` connectors:
+
+- `inference.model.local_file_path` is copied from `local_file_path`.
+- `embeddings.model.local_file_path` is copied from
+  `embedding_local_file_path`.
+- `embeddings.model.embedding_size` is read from GGUF metadata when the file is
+  available; otherwise it is `null`.
+- `inference.model_options` comes from top-level `data.model_options`.
+- `embeddings.model_options` comes from top-level
+  `data.embedding_model_options`.
+
+For `openai` connectors:
+
+- `provider` is `openai`.
+- `*.model.local_file_path` is `null`.
+- `embeddings.model.name` is copied from `embedding_name`.
+- Known embedding sizes and token limits are populated for
+  `text-embedding-3-small`, `text-embedding-3-large`, and
+  `text-embedding-ada-002`; unknown embedding models use `null` for
+  `embedding_size` and the default embedding input token limit.
+
+Embedding chunking is stored in character units because file parsers extract
+plain text before token-safe splitting. Local embedding generation still checks
+the runtime llama token limit before embedding, and uses the smaller of the
+metadata limit and the actual llama context capacity.
 
 ## Connector Inference
 

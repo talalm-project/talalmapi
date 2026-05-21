@@ -10,6 +10,8 @@ def test_connector_factory_creates_connector(db_session):
     assert connector.name.startswith("Connector ")
     assert connector.connection_type == "local"
     assert connector.local_file_path.endswith(".gguf")
+    assert connector.embedding_local_file_path.endswith(".gguf")
+    assert connector.embedding_name.startswith("Embedding ")
     assert connector.api_key is None
     assert connector.data == {"model": "llama"}
     assert connector.created_at is not None
@@ -26,6 +28,8 @@ def test_connector_to_dict_returns_public_fields(db_session):
         "name": connector.name,
         "connection_type": connector.connection_type,
         "local_file_path": connector.local_file_path,
+        "embedding_local_file_path": connector.embedding_local_file_path,
+        "embedding_name": connector.embedding_name,
         "data": {"model": "llama"},
     }
     assert "api_key" not in connector.to_dict()

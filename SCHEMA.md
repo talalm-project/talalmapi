@@ -71,6 +71,8 @@ Model: `app.models.connector.Connector`
 | `name` | `String(255)` | No | None | Connector display name |
 | `connection_type` | `String(50)` | No | None | Application-level values: `local`, `openai` |
 | `local_file_path` | `String(1024)` | Yes | None | Local GGUF file path |
+| `embedding_local_file_path` | `String(1024)` | Yes | None | Local embedding model file path |
+| `embedding_name` | `String(255)` | Yes | None | Embedding model name |
 | `api_key` | `String(255)` | Yes | None | API key for remote connector types |
 | `data` | `JSONB` | No | `{}` | Metadata about the connector |
 | `created_at` | `DateTime(timezone=True)` | No | Current UTC datetime | Set by ORM on insert; migration has database default |
@@ -103,7 +105,7 @@ includes `api_key` in connector response payloads.
 
 ## Migration Notes
 
-The Alembic history currently creates this schema in five revisions:
+The Alembic history currently creates this schema in six revisions:
 
 | Revision | Change |
 | --- | --- |
@@ -112,6 +114,7 @@ The Alembic history currently creates this schema in five revisions:
 | `0003_create_connectors` | Creates `connectors` with a user foreign key, connector settings, timestamps, and JSONB metadata. |
 | `0004_add_code_to_connectors` | Adds user-scoped connector codes and a unique constraint on `user_id` plus `code`. |
 | `0005_rename_openai_type` | Renames the OpenAI connector value from `open-ai` to `openai`. |
+| `0006_add_connector_embeddings` | Adds optional embedding model path and name fields to `connectors`. |
 
 ## Current Schema Boundaries
 

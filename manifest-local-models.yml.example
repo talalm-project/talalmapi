@@ -2,3 +2,7 @@
   name: "Mistral 3.5"
   type: "inference"
   path: "models/mistral.gguf"
+-
+  name: "Qwen Embedding"
+  type: "embedding"
+  path: "models/qwen-embedding.gguf"
