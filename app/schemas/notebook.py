@@ -1,7 +1,24 @@
 from pydantic import BaseModel
 
 
-class NotebookOut(BaseModel):
+class NotebookCreate(BaseModel):
+    title: str | None = None
+    connector_id: str | None = None
+
+
+class NotebookConnectorOut(BaseModel):
+    id: str
+    user_id: str
+    code: str
+    name: str
+    connection_type: str
+    local_file_path: str | None = None
+    embedding_local_file_path: str | None = None
+    embedding_name: str | None = None
+    data: dict
+
+
+class NotebookListOut(BaseModel):
     id: str
     title: str
     data: dict
@@ -10,8 +27,12 @@ class NotebookOut(BaseModel):
     status: str
 
 
+class NotebookOut(NotebookListOut):
+    connector: NotebookConnectorOut | None = None
+
+
 class NotebookCollection(BaseModel):
-    records: list[NotebookOut]
+    records: list[NotebookListOut]
     total_pages: int
     current_page: int
     next_page: int | None

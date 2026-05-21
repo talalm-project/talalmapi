@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -6,11 +7,31 @@ from app.db import get_db
 from app.dependencies.auth import require_active_user
 from app.models.notebook import Notebook
 from app.models.user import User
-from app.schemas.notebook import NotebookCollection
+from app.operations.notebooks import Save
+from app.schemas.notebook import NotebookCollection, NotebookCreate, NotebookOut
 
 
 ITEMS_PER_PAGE = 15
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
+
+
+@router.post("", response_model=NotebookOut, status_code=201)
+def create(
+    payload: NotebookCreate,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = Save(
+        session=session,
+        user=current_user,
+        title=payload.title,
+        connector_id=payload.connector_id,
+    )
+    operation.execute()
+    if operation.invalid():
+        return JSONResponse(status_code=422, content=operation.payload)
+
+    return operation.notebook.to_dict()
 
 
 @router.get("", response_model=NotebookCollection)
@@ -63,3 +84,16 @@ def index(
         "next_page": page + 1 if page < total_pages else None,
         "prev_page": page - 1 if page > 1 else None,
     }
+
+
+@router.get("/{notebook_id}", response_model=NotebookOut)
+def show(
+    notebook_id: str,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    notebook = session.get(Notebook, notebook_id)
+    if notebook is None or notebook.user_id != current_user.id:
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    return notebook.to_dict(include_connector=True)

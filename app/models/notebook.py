@@ -42,8 +42,8 @@ class Notebook(Base):
     user = relationship("User", back_populates="notebooks")
     connector = relationship("Connector", back_populates="notebooks")
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_connector=False):
+        payload = {
             "id": self.id,
             "title": self.title,
             "data": self.data,
@@ -51,3 +51,8 @@ class Notebook(Base):
             "connector_id": self.connector_id,
             "status": self.status,
         }
+
+        if include_connector:
+            payload["connector"] = self.connector.to_dict() if self.connector is not None else None
+
+        return payload
