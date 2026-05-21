@@ -2,6 +2,7 @@ import factory
 
 from app.helpers.api_helpers import build_password_hash
 from app.models.connector import Connector
+from app.models.notebook import Notebook
 from app.models.user import User
 
 
@@ -34,3 +35,16 @@ class ConnectorFactory(factory.alchemy.SQLAlchemyModelFactory):
     embedding_name = factory.Sequence(lambda n: f"Embedding {n}")
     api_key = None
     data = factory.Dict({})
+
+
+class NotebookFactory(factory.alchemy.SQLAlchemyModelFactory):
+    class Meta:
+        model = Notebook
+        sqlalchemy_session = None
+        sqlalchemy_session_persistence = "commit"
+
+    connector = factory.SubFactory(ConnectorFactory)
+    user = factory.SelfAttribute("connector.user")
+    title = factory.Sequence(lambda n: f"Notebook {n}")
+    data = factory.Dict({})
+    status = "pending"

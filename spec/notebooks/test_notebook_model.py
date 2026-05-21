@@ -1,0 +1,46 @@
+from app.models.notebook import ALLOWED_NOTEBOOK_STATUSES, Notebook
+from spec.factories import ConnectorFactory, NotebookFactory
+
+
+def test_notebook_factory_creates_notebook(db_session):
+    connector = ConnectorFactory(data={"llm": {"model": "llama"}})
+    notebook = NotebookFactory(connector=connector, data=connector.data)
+
+    assert notebook.id is not None
+    assert notebook.title.startswith("Notebook ")
+    assert notebook.data == {"llm": {"model": "llama"}}
+    assert notebook.user_id == connector.user_id
+    assert notebook.user == connector.user
+    assert notebook.connector_id == connector.id
+    assert notebook.connector == connector
+    assert notebook.status == "pending"
+    assert notebook.created_at is not None
+    assert notebook.updated_at is not None
+
+
+def test_notebook_defaults(db_session):
+    connector = ConnectorFactory()
+    notebook = Notebook(title="Defaulted Notebook", user=connector.user, connector=connector)
+
+    db_session.add(notebook)
+    db_session.commit()
+
+    assert notebook.data == {}
+    assert notebook.status == "pending"
+
+
+def test_notebook_to_dict_returns_public_fields(db_session):
+    notebook = NotebookFactory(title="Research Notes", data={"copied": True}, status="active")
+
+    assert notebook.to_dict() == {
+        "id": notebook.id,
+        "title": "Research Notes",
+        "data": {"copied": True},
+        "user_id": notebook.user_id,
+        "connector_id": notebook.connector_id,
+        "status": "active",
+    }
+
+
+def test_allowed_notebook_statuses():
+    assert ALLOWED_NOTEBOOK_STATUSES == {"pending", "active"}

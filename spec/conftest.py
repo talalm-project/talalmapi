@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app import create_app
 from app.db import Base, db
 from app.helpers.api_helpers import build_jwt_header, generate_jwt
-from spec.factories import ConnectorFactory, UserFactory
+from spec.factories import ConnectorFactory, NotebookFactory, UserFactory
 
 
 @pytest.fixture()
@@ -26,10 +26,12 @@ def client(app):
 def db_session(app):
     session = db.session()
     ConnectorFactory._meta.sqlalchemy_session = session
+    NotebookFactory._meta.sqlalchemy_session = session
     UserFactory._meta.sqlalchemy_session = session
     yield session
     session.close()
     ConnectorFactory._meta.sqlalchemy_session = None
+    NotebookFactory._meta.sqlalchemy_session = None
     UserFactory._meta.sqlalchemy_session = None
 
 

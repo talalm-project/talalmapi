@@ -32,6 +32,7 @@ class User(Base):
         onupdate=utcnow,
     )
     connectors = relationship("Connector", back_populates="user")
+    notebooks = relationship("Notebook", back_populates="user")
 
     def full_name(self):
         return f"{self.last_name}, {self.first_name}"
