@@ -35,12 +35,12 @@ def test_create_notebook_assigns_current_user_and_copies_connector_data(client, 
     assert payload["user_id"] == user.id
     assert payload["connector_id"] == connector.id
     assert payload["status"] == "pending"
-    assert payload["data"] == connector.data
+    assert payload["data"] == {"connector": connector.data}
 
     notebook = db_session.get(Notebook, payload["id"])
     assert notebook.user_id == user.id
     assert notebook.connector_id == connector.id
-    assert notebook.data == connector.data
+    assert notebook.data == {"connector": connector.data}
     assert notebook.status == "pending"
 
 

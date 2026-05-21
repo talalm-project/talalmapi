@@ -33,7 +33,7 @@ class Save(Validator):
                 title=self.title.strip(),
                 user_id=self.user.id,
                 connector_id=self.connector.id,
-                data=deepcopy(self.connector.data or {}),
+                data={"connector": deepcopy(self.connector.data or {})},
                 status="pending",
             )
             self.session.add(self.notebook)
