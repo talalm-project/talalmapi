@@ -3,6 +3,9 @@ from pathlib import Path
 import yaml
 
 
+ALLOWED_LOCAL_MODEL_TYPES = {"inference", "embeddings"}
+
+
 class LocalModelsService:
     def __init__(self, manifest_path):
         self.manifest_path = Path(manifest_path)
@@ -20,6 +23,7 @@ class LocalModelsService:
         return [
             {
                 "name": record.get("name"),
+                "type": record.get("type") if record.get("type") in ALLOWED_LOCAL_MODEL_TYPES else None,
                 "path": record.get("path"),
             }
             for record in records

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -12,4 +14,5 @@ class LoginResponse(BaseModel):
 
 class LocalModel(BaseModel):
     name: str | None = None
+    type: Literal["inference", "embeddings"] | None = None
     path: str | None = None

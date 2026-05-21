@@ -10,9 +10,11 @@ def test_local_models_returns_manifest_content_for_authenticated_user(client, ap
         """
 -
   name: "Mistral 3.5"
+  type: "inference"
   path: "models/mistral.gguf"
 -
   name: "Llama"
+  type: "embeddings"
   path: "models/llama.gguf"
 """.strip(),
         encoding="utf-8",
@@ -23,8 +25,29 @@ def test_local_models_returns_manifest_content_for_authenticated_user(client, ap
 
     assert response.status_code == 200
     assert response.json() == [
-        {"name": "Mistral 3.5", "path": "models/mistral.gguf"},
-        {"name": "Llama", "path": "models/llama.gguf"},
+        {"name": "Mistral 3.5", "type": "inference", "path": "models/mistral.gguf"},
+        {"name": "Llama", "type": "embeddings", "path": "models/llama.gguf"},
+    ]
+
+
+def test_local_models_only_returns_supported_model_types(client, app, user_auth_headers, tmp_path):
+    manifest_path = tmp_path / "manifest-local-models.yml"
+    manifest_path.write_text(
+        """
+-
+  name: "Invalid"
+  type: "reranker"
+  path: "models/reranker.gguf"
+""".strip(),
+        encoding="utf-8",
+    )
+    app.state.settings.LOCAL_MODELS_MANIFEST_PATH = str(manifest_path)
+
+    response = client.get("/system/local_models", headers=user_auth_headers)
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"name": "Invalid", "type": None, "path": "models/reranker.gguf"},
     ]
 
 

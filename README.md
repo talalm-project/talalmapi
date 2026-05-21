@@ -168,12 +168,13 @@ Create the local manifest from the example:
 cp manifest-local-models.yml.example manifest-local-models.yml
 ```
 
-Each manifest entry has a display `name` and a `path` relative to the backend
-application directory:
+Each manifest entry has a display `name`, a `type` (`inference` or
+`embeddings`), and a `path` relative to the backend application directory:
 
 ```yaml
 -
   name: "Mistral 3.5"
+  type: "inference"
   path: "models/mistral.gguf"
 ```
 
