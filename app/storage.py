@@ -43,6 +43,15 @@ def delete_file(settings, key):
     client.delete_object(Bucket=bucket, Key=key)
 
 
+def download_file_to_path(settings, key, destination_path):
+    bucket = settings.STORAGE_S3_BUCKET
+    if not bucket:
+        raise ValueError("STORAGE_S3_BUCKET must be set")
+
+    client = _get_s3_client(settings)
+    client.download_file(bucket, key, str(destination_path))
+
+
 def _store_s3(upload, settings, filename=None, key=None):
     bucket = settings.STORAGE_S3_BUCKET
     if not bucket:

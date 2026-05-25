@@ -174,6 +174,8 @@ def test_list_notebooks_only_returns_current_users_notebooks(client, app, db_ses
     user = UserFactory(role="user")
     connector = ConnectorFactory(user=user)
     owned = NotebookFactory(user=user, connector=connector, title="Owned Notebook")
+    NotebookFileFactory(notebook=owned)
+    NotebookFileFactory(notebook=owned)
     NotebookFactory(title="Other Notebook")
 
     response = client.get("/notebooks", headers=_headers(app, user))
@@ -189,6 +191,7 @@ def test_list_notebooks_only_returns_current_users_notebooks(client, app, db_ses
             "connector_id": connector.id,
             "embedding_config_id": owned.embedding_config_id,
             "status": "active",
+            "files_count": 2,
         }
     ]
 
@@ -303,6 +306,7 @@ def test_show_notebook_allows_owner(client, app, db_session):
         "connector_id": connector.id,
         "embedding_config_id": notebook.embedding_config_id,
         "status": "active",
+        "files_count": 0,
         "connector": connector.to_dict(),
     }
 
@@ -380,11 +384,16 @@ def test_infer_notebook_uses_notebook_connector_and_system_prompt(client, app, d
         "choices": [{"message": {"role": "assistant", "content": "notebook answer"}, "finish_reason": "stop"}],
         "usage": {"total_tokens": 4},
     }
-    assert captured["init"] == {"model_path": "/tmp/model.gguf"}
+    assert captured["init"] == {"model_path": "/tmp/model.gguf", "n_ctx": 4096}
     assert captured["completion"] == {
         "messages": [
-            {"role": "system", "content": "Answer only from this notebook."},
-            {"role": "user", "content": "Summarize"},
+            {
+                "role": "user",
+                "content": (
+                    "Instructions:\n\nAnswer only from this notebook.\n\nNotebook context:\n\n"
+                    "No relevant notebook context was retrieved.\n\nUser question:\n\nSummarize"
+                ),
+            },
         ],
         "max_tokens": 16,
     }
@@ -439,9 +448,135 @@ def test_infer_notebook_uses_system_prompt_as_openai_instructions(client, app, d
     assert captured["init"] == {"api_key": "sk-secret"}
     assert captured["create"] == {
         "model": "gpt-4.1",
-        "input": "Summarize",
+        "input": "Notebook context:\n\nNo relevant notebook context was retrieved.\n\nUser question:\n\nSummarize",
         "instructions": "Use notebook context before general knowledge.",
     }
+
+
+def test_infer_notebook_retrieves_top_k_context(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user, connection_type="local", local_file_path="/tmp/model.gguf")
+    notebook = NotebookFactory(user=user, connector=connector)
+    notebook_file = NotebookFileFactory(
+        notebook=notebook,
+        name="MobileNet Paper",
+        filename="mobilenet.pdf",
+        content_type="application/pdf",
+        byte_size=2048,
+        data={"url": "http://localhost:9000/talalm-test/mobilenet.pdf"},
+        status="active",
+    )
+    NotebookVectorFactory(
+        notebook=notebook,
+        notebook_file=notebook_file,
+        embedding_config=notebook.embedding_config,
+        chunk_index=1,
+        text="Most relevant notebook chunk.",
+        embedding=[1.0, 0.0, 0.0],
+    )
+    NotebookVectorFactory(
+        notebook=notebook,
+        embedding_config=notebook.embedding_config,
+        chunk_index=2,
+        text="Less relevant notebook chunk.",
+        embedding=[0.0, 1.0, 0.0],
+    )
+    captured = {}
+
+    class FakeEmbeddingLlama:
+        def __init__(self, **kwargs):
+            captured["embedding_init"] = kwargs
+
+        def create_embedding(self, _input):
+            return {"data": [{"embedding": [1.0, 0.0, 0.0]}]}
+
+    class FakeInferenceLlama:
+        def __init__(self, **kwargs):
+            captured["inference_init"] = kwargs
+
+        def create_chat_completion(self, **kwargs):
+            captured["completion"] = kwargs
+            return {"choices": [{"message": {"role": "assistant", "content": "answer"}}]}
+
+    monkeypatch.setattr("app.operations.notebooks.generate_query_embedding._llama_class", lambda: FakeEmbeddingLlama)
+    monkeypatch.setattr("app.operations.connectors.infer._llama_class", lambda: FakeInferenceLlama)
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/infer",
+        headers=_headers(app, user),
+        json={"prompt": "What is in the file?", "k": 1},
+    )
+
+    user_message = captured["completion"]["messages"][0]["content"]
+    assert response.status_code == 200
+    assert captured["embedding_init"] == {"model_path": connector.embedding_local_file_path, "embedding": True}
+    assert "Most relevant notebook chunk." in user_message
+    assert "Less relevant notebook chunk." not in user_message
+    assert response.json()["sources"] == [
+        {
+            "id": notebook_file.id,
+            "name": "MobileNet Paper",
+            "filename": "mobilenet.pdf",
+            "content_type": "application/pdf",
+            "byte_size": 2048,
+            "url": "http://localhost:9000/talalm-test/mobilenet.pdf",
+        }
+    ]
+
+
+def test_infer_notebook_contextualizes_follow_up_queries(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user, connection_type="local", local_file_path="/tmp/model.gguf")
+    notebook = NotebookFactory(user=user, connector=connector)
+    NotebookVectorFactory(
+        notebook=notebook,
+        embedding_config=notebook.embedding_config,
+        chunk_index=1,
+        text="MobileNetV4 is a neural network architecture.",
+        embedding=[1.0, 0.0, 0.0],
+    )
+    captured = {}
+
+    class FakeEmbeddingLlama:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create_embedding(self, input):
+            captured["embedding_input"] = input
+            return {"data": [{"embedding": [1.0, 0.0, 0.0]}]}
+
+    class FakeInferenceLlama:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create_chat_completion(self, **kwargs):
+            captured["completion"] = kwargs
+            return {"choices": [{"message": {"role": "assistant", "content": "answer"}}]}
+
+    monkeypatch.setattr("app.operations.notebooks.generate_query_embedding._llama_class", lambda: FakeEmbeddingLlama)
+    monkeypatch.setattr("app.operations.connectors.infer._llama_class", lambda: FakeInferenceLlama)
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/infer",
+        headers=_headers(app, user),
+        json={
+            "input": [
+                {"role": "user", "content": "Tell me about MobileNetV4"},
+                {"role": "assistant", "content": "MobileNetV4 details from the notebook."},
+                {"role": "user", "content": "What is the main point of the paper?"},
+            ],
+            "k": 1,
+        },
+    )
+
+    prompt = captured["completion"]["messages"][0]["content"]
+    assert response.status_code == 200
+    assert "Tell me about MobileNetV4" in captured["embedding_input"]
+    assert "What is the main point of the paper?" in captured["embedding_input"]
+    assert "Conversation context:" in prompt
+    assert "User: Tell me about MobileNetV4" in prompt
+    assert "Assistant: MobileNetV4 details from the notebook." in prompt
+    assert "User question:\n\nWhat is the main point of the paper?" in prompt
 
 
 def test_infer_notebook_hides_other_users_notebook(client, app, db_session):
@@ -479,8 +614,13 @@ def test_admin_can_infer_against_other_users_notebook(client, app, db_session, m
     assert response.status_code == 200
     assert response.json()["response"] == {
         "messages": [
-            {"role": "system", "content": "Admin-visible prompt."},
-            {"role": "user", "content": "Summarize"},
+            {
+                "role": "user",
+                "content": (
+                    "Instructions:\n\nAdmin-visible prompt.\n\nNotebook context:\n\n"
+                    "No relevant notebook context was retrieved.\n\nUser question:\n\nSummarize"
+                ),
+            },
         ]
     }
 
@@ -604,6 +744,28 @@ def test_create_notebook_file_rejects_unsupported_file_type(client, app, db_sess
 
     assert response.status_code == 422
     assert response.json()["file"] == ["unsupported file type"]
+
+
+def test_create_notebook_file_rejects_files_larger_than_five_mb(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    stored = {"called": False}
+
+    monkeypatch.setattr(
+        "app.operations.notebooks.create_file.store_file_at_key",
+        lambda upload, settings, key, filename=None: stored.update({"called": True}),
+    )
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/notebook_files",
+        headers=_headers(app, user),
+        data={"name": "Large Notes"},
+        files={"file": ("large.pdf", b"x" * (5 * 1024 * 1024 + 1), "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["file"] == ["too large"]
+    assert stored == {"called": False}
 
 
 def test_create_notebook_file_hides_other_users_notebook(client, app, db_session):

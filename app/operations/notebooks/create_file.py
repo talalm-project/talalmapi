@@ -8,6 +8,7 @@ from app.storage import store_file_at_key
 
 
 SUPPORTED_NOTEBOOK_FILE_EXTENSIONS = {".docx", ".xlsx", ".txt", ".pdf", ".pptx"}
+MAX_NOTEBOOK_FILE_BYTE_SIZE = 5 * 1024 * 1024
 
 
 class CreateFile(Validator):
@@ -31,11 +32,11 @@ class CreateFile(Validator):
         if self.notebook is None:
             return
 
-        self._validate()
+        byte_size, checksum = _file_details(self.file)
+        self._validate(byte_size)
         if self.invalid():
             return
 
-        byte_size, checksum = _file_details(self.file)
         object_key = generate_object_key()
         stored_file = store_file_at_key(self.file, self.settings, object_key, filename=self.file.filename)
 
@@ -56,13 +57,15 @@ class CreateFile(Validator):
     def found(self):
         return self.notebook is not None
 
-    def _validate(self):
+    def _validate(self, byte_size):
         if self.name is None or not self.name.strip():
             self.payload["name"].append("required")
 
         extension = Path(self.file.filename or "").suffix.lower()
         if extension not in SUPPORTED_NOTEBOOK_FILE_EXTENSIONS:
             self.payload["file"].append("unsupported file type")
+        if byte_size > MAX_NOTEBOOK_FILE_BYTE_SIZE:
+            self.payload["file"].append("too large")
 
         self.count_errors()
 

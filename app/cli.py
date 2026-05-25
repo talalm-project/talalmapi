@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import signal
 import subprocess
@@ -249,6 +250,21 @@ def run_system_seed(_args):
     return status_code
 
 
+def run_system_start_notebook_worker(_args):
+    from app.db import db
+    from app.operations.notebooks import NotebookWorker
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+    settings = _active_settings()
+    db.configure(settings.SQLALCHEMY_DATABASE_URI)
+    worker = NotebookWorker(settings=settings)
+    worker.run_forever()
+    return 0
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="python -m app.cli",
@@ -277,6 +293,12 @@ def build_parser():
 
     seed_parser = subparsers.add_parser("system:seed", help="Seed the default application data")
     seed_parser.set_defaults(handler=run_system_seed)
+
+    notebook_worker_parser = subparsers.add_parser(
+        "system:start_notebook_worker",
+        help="Start the notebook file embedding worker",
+    )
+    notebook_worker_parser.set_defaults(handler=run_system_start_notebook_worker)
 
     db_create_parser = subparsers.add_parser("db:create", help="Create the configured database")
     db_create_parser.set_defaults(handler=run_db_create)

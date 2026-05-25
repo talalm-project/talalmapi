@@ -28,6 +28,7 @@ class NotebookListOut(BaseModel):
     connector_id: str
     embedding_config_id: str | None = None
     status: str
+    files_count: int = 0
 
 
 class NotebookOut(NotebookListOut):

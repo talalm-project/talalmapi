@@ -46,3 +46,4 @@ class ConnectorInfer(BaseModel):
     input: Any = None
     model: str | None = None
     options: dict = Field(default_factory=dict)
+    k: int | None = Field(default=None, ge=1, le=500)

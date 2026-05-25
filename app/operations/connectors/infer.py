@@ -70,7 +70,11 @@ class Infer:
         llm = llama_class(model_path=inference_local_file_path(self.connector), **model_options)
         options = {"max_tokens": inference_default_output_tokens(self.connector, DEFAULT_LOCAL_MAX_TOKENS), **self.payload.options}
         started_at = perf_counter()
-        response = llm.create_chat_completion(messages=self._local_messages(), **options)
+        try:
+            response = llm.create_chat_completion(messages=self._local_messages(), **options)
+        except ValueError as error:
+            self.errors = {"inference": [str(error)]}
+            return None
         return _response_with_details(response, perf_counter() - started_at)
 
     def _infer_openai(self):

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.cli import build_parser, run_services_create_bucket, run_system_seed
+from app.cli import build_parser, run_services_create_bucket, run_system_seed, run_system_start_notebook_worker
 from app.helpers.api_helpers import password_match
 from app.models.user import User
 from spec.factories import UserFactory
@@ -83,10 +83,39 @@ def test_services_create_bucket_command_is_registered():
     assert args.handler is run_services_create_bucket
 
 
+def test_start_notebook_worker_command_is_registered():
+    args = build_parser().parse_args(["system:start_notebook_worker"])
+
+    assert args.handler is run_system_start_notebook_worker
+
+
+def test_start_notebook_worker_configures_database_and_starts_worker(app, monkeypatch):
+    captured = {}
+
+    class FakeWorker:
+        def __init__(self, settings):
+            captured["settings"] = settings
+
+        def run_forever(self):
+            captured["run_forever"] = True
+
+    monkeypatch.setattr("app.cli._active_settings", lambda: app.state.settings)
+    monkeypatch.setattr("app.db.db.configure", lambda database_uri: captured.update({"database_uri": database_uri}))
+    monkeypatch.setattr("app.operations.notebooks.NotebookWorker", FakeWorker)
+
+    result = run_system_start_notebook_worker(SimpleNamespace())
+
+    assert result == 0
+    assert captured["database_uri"] == app.state.settings.SQLALCHEMY_DATABASE_URI
+    assert captured["settings"] == app.state.settings
+    assert captured["run_forever"] is True
+
+
 def test_namespaced_commands_use_colon_separator():
     parser = build_parser()
 
     assert parser.parse_args(["system:greet"]).command == "system:greet"
+    assert parser.parse_args(["system:start_notebook_worker"]).command == "system:start_notebook_worker"
     assert parser.parse_args(["db:migrate"]).command == "db:migrate"
     assert parser.parse_args(["db:downgrade"]).command == "db:downgrade"
     assert parser.parse_args(["db:history"]).command == "db:history"

@@ -57,7 +57,7 @@ class Notebook(Base):
     files = relationship("NotebookFile", back_populates="notebook")
     vectors = relationship("NotebookVector", back_populates="notebook")
 
-    def to_dict(self, include_connector=False):
+    def to_dict(self, include_connector=False, files_count=None):
         payload = {
             "id": self.id,
             "title": self.title,
@@ -68,6 +68,9 @@ class Notebook(Base):
             "embedding_config_id": self.embedding_config_id,
             "status": self.status,
         }
+
+        if files_count is not None:
+            payload["files_count"] = files_count
 
         if include_connector:
             payload["connector"] = self.connector.to_dict() if self.connector is not None else None

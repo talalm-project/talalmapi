@@ -3,6 +3,7 @@ from struct import unpack_from
 
 
 DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS = 4096
+DEFAULT_LLAMA_CPP_CONTEXT_WINDOW_TOKENS = 512
 DEFAULT_LOCAL_EMBEDDING_CONTEXT_WINDOW_TOKENS = 65536
 DEFAULT_LOCAL_EMBEDDING_BATCH_TOKENS = 512
 DEFAULT_LOCAL_EMBEDDING_SEQUENCES = 256
@@ -70,10 +71,23 @@ def build_connector_metadata(connector_attrs, data=None):
 def inference_model_options(connector):
     metadata_options = _section_value(connector, "inference", "model_options")
     if isinstance(metadata_options, dict):
-        return metadata_options
+        return _with_local_inference_context(connector, metadata_options)
 
     options = _data(connector).get("model_options", {})
-    return options if isinstance(options, dict) else {}
+    options = options if isinstance(options, dict) else {}
+    return _with_local_inference_context(connector, options)
+
+
+def inference_context_window_tokens(connector):
+    value = _section_value(connector, "inference", "limits", "context_window_tokens")
+    if isinstance(value, int) and value > 0:
+        return value
+
+    value = inference_model_options(connector).get("n_ctx")
+    if isinstance(value, int) and value > 0:
+        return value
+
+    return _local_inference_context_window(_get_value(connector, "local_file_path"), {}) or DEFAULT_LLAMA_CPP_CONTEXT_WINDOW_TOKENS
 
 
 def inference_model_name(connector):
@@ -133,15 +147,16 @@ def embedding_max_input_tokens(connector):
 
 def _inference_metadata(connector_attrs, data, connection_type):
     model_options = _dict_value(data.get("model_options"))
-    context_window_tokens = _positive_int(model_options.get("n_ctx"))
 
     if connection_type == "local":
-        context_window_tokens = context_window_tokens or DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS
+        context_window_tokens = _local_inference_context_window(_get_value(connector_attrs, "local_file_path"), model_options)
+        model_options = {**model_options, "n_ctx": context_window_tokens}
         model = {
             "name": _get_value(connector_attrs, "name"),
             "local_file_path": _get_value(connector_attrs, "local_file_path"),
         }
     else:
+        context_window_tokens = _positive_int(model_options.get("n_ctx"))
         model = {
             "name": _get_value(connector_attrs, "name"),
             "local_file_path": None,
@@ -259,6 +274,17 @@ def _positive_int(value):
     return value if isinstance(value, int) and value > 0 else None
 
 
+def _with_local_inference_context(connector, options):
+    normalized_options = dict(options)
+    if _get_value(connector, "connection_type") != "local":
+        return normalized_options
+    if _positive_int(normalized_options.get("n_ctx")):
+        return normalized_options
+
+    normalized_options["n_ctx"] = _local_inference_context_window(_get_value(connector, "local_file_path"), normalized_options)
+    return normalized_options
+
+
 def _get_value(source, key):
     if isinstance(source, dict):
         return source.get(key)
@@ -271,12 +297,34 @@ def _local_embedding_size(model_path):
         return None
 
     try:
-        return _gguf_embedding_size(Path(model_path))
+        return _gguf_metadata_value(Path(model_path), ".embedding_length")
     except (OSError, ValueError, TypeError):
         return None
 
 
-def _gguf_embedding_size(model_path):
+def _local_inference_context_window(model_path, model_options):
+    configured_context = _positive_int(model_options.get("n_ctx")) or _positive_int(model_options.get("context_window_tokens"))
+    if configured_context:
+        return configured_context
+
+    model_context = _local_model_context_window(model_path)
+    if model_context:
+        return min(model_context, DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS)
+
+    return DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS
+
+
+def _local_model_context_window(model_path):
+    if not model_path:
+        return None
+
+    try:
+        return _gguf_metadata_value(Path(model_path), ".context_length")
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _gguf_metadata_value(model_path, key_suffix):
     if not model_path.exists() or not model_path.is_file():
         return None
 
@@ -291,7 +339,7 @@ def _gguf_embedding_size(model_path):
         for _ in range(metadata_count):
             key = _read_gguf_string(handle)
             value_type = _read_gguf_uint32(handle)
-            if key.endswith(".embedding_length"):
+            if key.endswith(key_suffix):
                 return _read_gguf_integer_value(handle, value_type)
 
             _skip_gguf_value(handle, value_type)

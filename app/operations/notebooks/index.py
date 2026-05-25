@@ -1,6 +1,7 @@
 from sqlalchemy import func, or_, select
 
 from app.models.notebook import Notebook
+from app.models.notebook_file import NotebookFile
 from app.operations.notebooks.ensure_embedding_configs import EnsureEmbeddingConfigs
 
 
@@ -16,6 +17,7 @@ class Index:
         self.status = status
         self.page = max(page, 1)
         self.notebooks = []
+        self.files_counts = {}
         self.total_pages = 1
         self.next_page = None
         self.prev_page = None
@@ -49,14 +51,30 @@ class Index:
             else []
         )
         EnsureEmbeddingConfigs(self.session, self.notebooks).execute()
+        self.files_counts = self._files_counts()
         self.next_page = self.page + 1 if self.page < self.total_pages else None
         self.prev_page = self.page - 1 if self.page > 1 else None
 
     def to_dict(self):
         return {
-            "records": [notebook.to_dict() for notebook in self.notebooks],
+            "records": [
+                notebook.to_dict(files_count=self.files_counts.get(notebook.id, 0))
+                for notebook in self.notebooks
+            ],
             "total_pages": self.total_pages,
             "current_page": self.page,
             "next_page": self.next_page,
             "prev_page": self.prev_page,
         }
+
+    def _files_counts(self):
+        notebook_ids = [notebook.id for notebook in self.notebooks]
+        if not notebook_ids:
+            return {}
+
+        rows = self.session.execute(
+            select(NotebookFile.notebook_id, func.count(NotebookFile.id))
+            .where(NotebookFile.notebook_id.in_(notebook_ids))
+            .group_by(NotebookFile.notebook_id)
+        ).all()
+        return {notebook_id: count for notebook_id, count in rows}

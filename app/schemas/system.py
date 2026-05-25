@@ -16,3 +16,6 @@ class LocalModel(BaseModel):
     name: str | None = None
     type: Literal["inference", "embedding", "embeddings"] | None = None
     path: str | None = None
+    context_window_min: int | None = None
+    context_window_max: int | None = None
+    context_window_recommended: int | None = None

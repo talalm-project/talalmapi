@@ -29,9 +29,30 @@ def test_local_models_returns_manifest_content_for_authenticated_user(client, ap
 
     assert response.status_code == 200
     assert response.json() == [
-        {"name": "Mistral 3.5", "type": "inference", "path": "models/mistral.gguf"},
-        {"name": "Llama", "type": "embeddings", "path": "models/llama.gguf"},
-        {"name": "Qwen Embedding", "type": "embedding", "path": "models/qwen-embedding.gguf"},
+        {
+            "name": "Mistral 3.5",
+            "type": "inference",
+            "path": "models/mistral.gguf",
+            "context_window_min": 512,
+            "context_window_max": 4096,
+            "context_window_recommended": 4096,
+        },
+        {
+            "name": "Llama",
+            "type": "embeddings",
+            "path": "models/llama.gguf",
+            "context_window_min": None,
+            "context_window_max": None,
+            "context_window_recommended": None,
+        },
+        {
+            "name": "Qwen Embedding",
+            "type": "embedding",
+            "path": "models/qwen-embedding.gguf",
+            "context_window_min": None,
+            "context_window_max": None,
+            "context_window_recommended": None,
+        },
     ]
 
 
@@ -52,7 +73,14 @@ def test_local_models_only_returns_supported_model_types(client, app, user_auth_
 
     assert response.status_code == 200
     assert response.json() == [
-        {"name": "Invalid", "type": None, "path": "models/reranker.gguf"},
+        {
+            "name": "Invalid",
+            "type": None,
+            "path": "models/reranker.gguf",
+            "context_window_min": None,
+            "context_window_max": None,
+            "context_window_recommended": None,
+        },
     ]
 
 
