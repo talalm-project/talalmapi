@@ -80,7 +80,7 @@ class NotebookFactory(factory.alchemy.SQLAlchemyModelFactory):
     user = factory.SelfAttribute("connector.user")
     title = factory.Sequence(lambda n: f"Notebook {n}")
     data = factory.Dict({})
-    status = "pending"
+    status = "active"
 
 
 class NotebookVectorFactory(factory.alchemy.SQLAlchemyModelFactory):

@@ -45,7 +45,7 @@ def test_create_notebook_assigns_current_user_and_copies_connector_data(client, 
     assert payload["user_id"] == user.id
     assert payload["connector_id"] == connector.id
     assert payload["embedding_config_id"]
-    assert payload["status"] == "pending"
+    assert payload["status"] == "active"
     assert payload["data"] == {"connector": connector.data}
 
     notebook = db_session.get(Notebook, payload["id"])
@@ -54,7 +54,7 @@ def test_create_notebook_assigns_current_user_and_copies_connector_data(client, 
     assert notebook.connector_id == connector.id
     assert notebook.embedding_config_id == embedding_config.id
     assert notebook.data == {"connector": connector.data}
-    assert notebook.status == "pending"
+    assert notebook.status == "active"
     assert embedding_config.connector_id == connector.id
     assert embedding_config.provider == "local"
     assert embedding_config.model_name == "Local Embedding"
@@ -161,7 +161,7 @@ def test_list_notebooks_only_returns_current_users_notebooks(client, app, db_ses
             "user_id": user.id,
             "connector_id": connector.id,
             "embedding_config_id": owned.embedding_config_id,
-            "status": "pending",
+            "status": "active",
         }
     ]
 
@@ -269,7 +269,7 @@ def test_show_notebook_allows_owner(client, app, db_session):
         "user_id": user.id,
         "connector_id": connector.id,
         "embedding_config_id": notebook.embedding_config_id,
-        "status": "pending",
+        "status": "active",
         "connector": connector.to_dict(),
     }
 

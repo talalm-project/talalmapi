@@ -14,7 +14,7 @@ def test_notebook_factory_creates_notebook(db_session):
     assert notebook.connector_id == connector.id
     assert notebook.connector == connector
     assert notebook.embedding_config_id == notebook.embedding_config.id
-    assert notebook.status == "pending"
+    assert notebook.status == "active"
     assert notebook.created_at is not None
     assert notebook.updated_at is not None
 
@@ -33,7 +33,7 @@ def test_notebook_defaults(db_session):
     db_session.commit()
 
     assert notebook.data == {}
-    assert notebook.status == "pending"
+    assert notebook.status == "active"
 
 
 def test_notebook_to_dict_returns_public_fields(db_session):

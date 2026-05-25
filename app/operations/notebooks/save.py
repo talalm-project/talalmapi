@@ -41,7 +41,7 @@ class Save(Validator):
                 connector_id=self.connector.id,
                 embedding_config_id=embedding_config.id,
                 data={"connector": deepcopy(self.connector.data or {})},
-                status="pending",
+                status="active",
             )
             self.session.add(self.notebook)
             self.session.commit()
