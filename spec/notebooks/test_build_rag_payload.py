@@ -72,6 +72,8 @@ def test_build_rag_payload_contextualizes_recent_chat_for_local_rag(db_session):
     operation.execute()
 
     assert operation.rag_payload.input is None
+    assert "Conversation context policy:" in operation.rag_payload.prompt
+    assert "resolve follow-up references like 'this'" in operation.rag_payload.prompt
     assert "Conversation context:" in operation.rag_payload.prompt
     assert "User: Previous question" in operation.rag_payload.prompt
     assert "Assistant: Previous answer" in operation.rag_payload.prompt

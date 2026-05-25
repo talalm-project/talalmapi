@@ -14,6 +14,7 @@ class Save(Validator):
         title=None,
         system_prompt=None,
         connector_id=None,
+        notebook=None,
     ):
         super().__init__()
         self.session = session
@@ -22,7 +23,7 @@ class Save(Validator):
         self.system_prompt = system_prompt
         self.connector_id = connector_id
         self.connector = None
-        self.notebook = None
+        self.notebook = notebook
         self.payload = {
             "title": [],
             "connector_id": [],
@@ -32,7 +33,14 @@ class Save(Validator):
     def execute(self):
         self._validate()
 
-        if self.valid():
+        if self.invalid():
+            return
+
+        if self.notebook is not None:
+            self.notebook.title = self.title.strip()
+            self.session.commit()
+            self.session.refresh(self.notebook)
+        else:
             embedding_config = self._resolve_embedding_config()
             if self.invalid():
                 return
@@ -53,6 +61,10 @@ class Save(Validator):
     def _validate(self):
         if self.title is None or not self.title.strip():
             self.payload["title"].append("required")
+
+        if self.notebook is not None:
+            self.count_errors()
+            return
 
         if self.connector_id is None or not str(self.connector_id).strip():
             self.payload["connector_id"].append("required")

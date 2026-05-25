@@ -51,8 +51,8 @@ def test_build_local_connector_metadata_caps_large_gguf_context_length(tmp_path)
         {},
     )
 
-    assert metadata["inference"]["limits"]["context_window_tokens"] == 4096
-    assert metadata["inference"]["model_options"]["n_ctx"] == 4096
+    assert metadata["inference"]["limits"]["context_window_tokens"] == 16384
+    assert metadata["inference"]["model_options"]["n_ctx"] == 16384
 
 
 def test_build_local_connector_metadata_keeps_explicit_n_ctx(tmp_path):
@@ -85,7 +85,7 @@ def test_build_local_connector_metadata_uses_null_embedding_size_when_gguf_is_un
     )
 
     assert metadata["embeddings"]["model"]["embedding_size"] is None
-    assert metadata["inference"]["model_options"]["n_ctx"] == 4096
+    assert metadata["inference"]["model_options"]["n_ctx"] == 16384
 
 
 def test_build_openai_connector_metadata_includes_embedding_size():

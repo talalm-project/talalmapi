@@ -7,6 +7,10 @@ class NotebookCreate(BaseModel):
     connector_id: str | None = None
 
 
+class NotebookUpdate(BaseModel):
+    title: str | None = None
+
+
 class NotebookConnectorOut(BaseModel):
     id: str
     user_id: str

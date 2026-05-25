@@ -2,6 +2,10 @@ from app.schemas.connector import ConnectorInfer
 from app.operations.connectors.metadata import inference_context_window_tokens, inference_default_output_tokens
 
 MAX_CONVERSATION_CONTEXT_CHARS = 1200
+CONVERSATION_CONTEXT_POLICY = (
+    "Use this conversation context to resolve follow-up references like 'this' and to transform prior answers. "
+    "Keep factual claims grounded in the notebook context."
+)
 
 
 class BuildRagPayload:
@@ -79,6 +83,7 @@ class BuildRagPayload:
 
         conversation_context = self._conversation_context()
         if conversation_context:
+            sections.extend(["Conversation context policy:", CONVERSATION_CONTEXT_POLICY])
             sections.extend(["Conversation context:", conversation_context])
 
         sections.extend(["Notebook context:", self._formatted_chunks(), "User question:", query])
@@ -123,6 +128,7 @@ class BuildRagPayload:
                 "Notebook context:",
                 "",
                 "Conversation context:",
+                CONVERSATION_CONTEXT_POLICY,
                 self._conversation_context(),
                 "User question:",
                 self._query_text(),

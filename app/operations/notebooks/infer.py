@@ -21,12 +21,14 @@ class Infer:
         if self.notebook is None:
             return
 
-        query = _query_from_payload(self.payload)
+        current_question = _current_question_from_payload(self.payload)
+        query = _query_from_payload(self.payload, current_question=current_question)
         retrieve_operation = RetrieveContext(
             session=self.session,
             notebook=self.notebook,
             query=query,
             k=self.payload.k,
+            target_query=current_question,
         )
         retrieve_operation.execute()
         if not retrieve_operation.valid():
@@ -79,7 +81,7 @@ class Infer:
         ]
 
 
-def _query_from_payload(payload):
+def _query_from_payload(payload, current_question=None):
     if isinstance(payload.prompt, str):
         return payload.prompt
 
@@ -87,30 +89,54 @@ def _query_from_payload(payload):
         return payload.input
 
     if isinstance(payload.input, list):
-        current_question = ""
-        previous_user_messages = []
+        current_question = current_question or _current_question_from_payload(payload)
+        previous_messages = []
+        current_user_seen = False
         for message in reversed(payload.input):
-            if isinstance(message, dict) and message.get("role") == "user" and isinstance(message.get("content"), str):
-                if not current_question:
-                    current_question = message["content"]
-                    continue
+            if not isinstance(message, dict):
+                continue
 
-                previous_user_messages.append(message["content"])
-                if len(previous_user_messages) >= 3:
-                    break
+            role = message.get("role")
+            content = message.get("content")
+            if role not in {"user", "assistant"} or not isinstance(content, str) or not content.strip():
+                continue
 
-        if current_question and previous_user_messages:
+            if role == "user" and not current_user_seen and content == current_question:
+                current_user_seen = True
+                continue
+
+            label = "User" if role == "user" else "Assistant"
+            previous_messages.append(f"{label}: {content}")
+            if len(previous_messages) >= 4:
+                break
+
+        if current_question and previous_messages:
             return "\n\n".join(
                 [
-                    "Recent user context:",
-                    "\n".join(reversed(previous_user_messages)),
                     "Current question:",
                     current_question,
+                    "Recent conversation:",
+                    "\n".join(reversed(previous_messages)),
                 ]
             )
 
         if current_question:
             return current_question
+
+    return ""
+
+
+def _current_question_from_payload(payload):
+    if isinstance(payload.prompt, str):
+        return payload.prompt
+
+    if isinstance(payload.input, str):
+        return payload.input
+
+    if isinstance(payload.input, list):
+        for message in reversed(payload.input):
+            if isinstance(message, dict) and message.get("role") == "user" and isinstance(message.get("content"), str):
+                return message["content"]
 
     return ""
 

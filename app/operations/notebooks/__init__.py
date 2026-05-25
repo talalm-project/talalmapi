@@ -9,6 +9,7 @@ from app.operations.notebooks.index import Index
 from app.operations.notebooks.index_files import IndexFiles
 from app.operations.notebooks.infer import Infer
 from app.operations.notebooks.notebook_worker import NotebookWorker
+from app.operations.notebooks.reindex import Reindex
 from app.operations.notebooks.retrieve_context import RetrieveContext
 from app.operations.notebooks.save import Save
 from app.operations.notebooks.show import Show
@@ -25,6 +26,7 @@ __all__ = [
     "IndexFiles",
     "Infer",
     "NotebookWorker",
+    "Reindex",
     "RetrieveContext",
     "Save",
     "Show",

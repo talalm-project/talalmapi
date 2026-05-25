@@ -7,7 +7,7 @@ It is based on the SQLAlchemy models in `app/models`.
 
 - ORM: SQLAlchemy declarative models using `app.db.Base`
 - Migrations: Alembic revisions in `alembic/versions`
-- Current model tables: `users`, `connectors`
+- Current model tables: `users`, `connectors`, `notebooks`, `notebook_files`, `embedding_configs`, `notebook_vectors`
 
 ## Tables
 
@@ -105,7 +105,7 @@ includes `api_key` in connector response payloads.
 
 ## Migration Notes
 
-The Alembic history currently creates this schema in six revisions:
+The Alembic history currently creates this schema through these revisions:
 
 | Revision | Change |
 | --- | --- |
@@ -115,6 +115,16 @@ The Alembic history currently creates this schema in six revisions:
 | `0004_add_code_to_connectors` | Adds user-scoped connector codes and a unique constraint on `user_id` plus `code`. |
 | `0005_rename_openai_type` | Renames the OpenAI connector value from `open-ai` to `openai`. |
 | `0006_add_connector_embeddings` | Adds optional embedding model path and name fields to `connectors`. |
+| `0007_enable_pgvector` | Enables vector storage support. |
+| `d0b2c0f348d7` | Empty schema update placeholder. |
+| `0008_create_notebooks` | Creates notebook records linked to users and connectors. |
+| `0009_embedding_vectors` | Creates embedding configs and notebook vector records. |
+| `0010_notebook_embedding_config` | Links notebooks to embedding configs. |
+| `0011_active_notebook_default` | Adds the notebook status default. |
+| `0012_notebook_files` | Creates notebook file metadata records. |
+| `0013_notebook_system_prompt` | Adds notebook-level system prompts. |
+| `0014_default_nb_prompt` | Backfills and defaults notebook system prompts. |
+| `0015_notebook_followup_prompt` | Updates the default notebook prompt so conversation context can resolve follow-up references while notebook context remains the factual source. |
 
 ## Current Schema Boundaries
 

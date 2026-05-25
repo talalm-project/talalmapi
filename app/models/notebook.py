@@ -11,8 +11,13 @@ from app.models.user import utcnow
 
 ALLOWED_NOTEBOOK_STATUSES = {"pending", "processing", "active", "failed"}
 DEFAULT_NOTEBOOK_SYSTEM_PROMPT = (
-    "You are answering questions about a notebook. Use only the provided context pulled from the notebook files. "
-    "If no context is provided, or if the user's question cannot be answered from that context, answer exactly: "
+    "You are answering questions about a notebook. Use the provided notebook context as the source of truth. "
+    "You may use the conversation context to resolve follow-up references like 'this' and to transform prior answers, "
+    "but factual claims must remain grounded in the notebook context. "
+    "For comparison questions, compare the available evidence for each named item and say when a requested detail is "
+    "not provided instead of refusing the whole comparison. "
+    "If no notebook context is provided, or if the user's question cannot be answered from that context or prior "
+    "conversation grounded in that context, answer exactly: "
     "I don't know."
 )
 

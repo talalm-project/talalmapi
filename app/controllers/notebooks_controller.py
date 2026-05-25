@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies.auth import require_active_user
 from app.models.user import User
-from app.operations.notebooks import CreateFile, Destroy, DestroyFile, DownloadFile, Index, IndexFiles, Infer, Save, Show
+from app.operations.notebooks import CreateFile, Destroy, DestroyFile, DownloadFile, Index, IndexFiles, Infer, Reindex, Save, Show
 from app.schemas.connector import ConnectorInfer
 from app.schemas.notebook_file import NotebookFileCollection, NotebookFileOut
-from app.schemas.notebook import NotebookCollection, NotebookCreate, NotebookOut
+from app.schemas.notebook import NotebookCollection, NotebookCreate, NotebookOut, NotebookUpdate
 
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
@@ -71,6 +71,31 @@ def show(
     return operation.notebook.to_dict(include_connector=True)
 
 
+@router.put("/{notebook_id}", response_model=NotebookOut)
+def update(
+    notebook_id: str,
+    payload: NotebookUpdate,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = Show(session=session, user=current_user, notebook_id=notebook_id)
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    save_operation = Save(
+        session=session,
+        user=current_user,
+        notebook=operation.notebook,
+        title=payload.title,
+    )
+    save_operation.execute()
+    if save_operation.invalid():
+        return JSONResponse(status_code=422, content=save_operation.payload)
+
+    return save_operation.notebook.to_dict(include_connector=True)
+
+
 @router.post("/{notebook_id}/infer")
 def infer(
     notebook_id: str,
@@ -86,6 +111,20 @@ def infer(
         return JSONResponse(status_code=422, content=operation.errors)
 
     return operation.response
+
+
+@router.post("/{notebook_id}/reindex")
+def reindex(
+    notebook_id: str,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = Reindex(session=session, user=current_user, notebook_id=notebook_id)
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    return operation.to_dict()
 
 
 @router.get("/{notebook_id}/notebook_files", response_model=NotebookFileCollection)

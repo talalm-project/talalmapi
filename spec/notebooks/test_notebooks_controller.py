@@ -350,6 +350,57 @@ def test_show_notebook_allows_legacy_missing_embedding_config(client, app, db_se
     assert response.json()["embedding_config_id"] is None
 
 
+def test_update_notebook_title_allows_owner(client, app, db_session):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user)
+    notebook = NotebookFactory(user=user, connector=connector, title="Original Title")
+
+    response = client.put(
+        f"/notebooks/{notebook.id}",
+        headers=_headers(app, user),
+        json={"title": " Updated Research Notebook "},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == notebook.id
+    assert payload["title"] == "Updated Research Notebook"
+    assert payload["connector"] == connector.to_dict()
+    db_session.expire_all()
+    assert db_session.get(Notebook, notebook.id).title == "Updated Research Notebook"
+
+
+def test_update_notebook_title_requires_title(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user, title="Original Title")
+
+    response = client.put(
+        f"/notebooks/{notebook.id}",
+        headers=_headers(app, user),
+        json={"title": "   "},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["title"] == ["required"]
+    db_session.expire_all()
+    assert db_session.get(Notebook, notebook.id).title == "Original Title"
+
+
+def test_update_notebook_title_hides_other_users_notebook(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(title="Other Notebook")
+
+    response = client.put(
+        f"/notebooks/{notebook.id}",
+        headers=_headers(app, user),
+        json={"title": "Renamed"},
+    )
+
+    assert response.status_code == 404
+    db_session.expire_all()
+    assert db_session.get(Notebook, notebook.id).title == "Other Notebook"
+
+
 def test_infer_notebook_uses_notebook_connector_and_system_prompt(client, app, db_session, monkeypatch):
     user = UserFactory(role="user")
     connector = ConnectorFactory(user=user, connection_type="local", local_file_path="/tmp/model.gguf")
@@ -384,7 +435,7 @@ def test_infer_notebook_uses_notebook_connector_and_system_prompt(client, app, d
         "choices": [{"message": {"role": "assistant", "content": "notebook answer"}, "finish_reason": "stop"}],
         "usage": {"total_tokens": 4},
     }
-    assert captured["init"] == {"model_path": "/tmp/model.gguf", "n_ctx": 4096}
+    assert captured["init"] == {"model_path": "/tmp/model.gguf", "n_ctx": 16384}
     assert captured["completion"] == {
         "messages": [
             {
@@ -573,6 +624,8 @@ def test_infer_notebook_contextualizes_follow_up_queries(client, app, db_session
     assert response.status_code == 200
     assert "Tell me about MobileNetV4" in captured["embedding_input"]
     assert "What is the main point of the paper?" in captured["embedding_input"]
+    assert "Conversation context policy:" in prompt
+    assert "resolve follow-up references like 'this'" in prompt
     assert "Conversation context:" in prompt
     assert "User: Tell me about MobileNetV4" in prompt
     assert "Assistant: MobileNetV4 details from the notebook." in prompt
@@ -1047,6 +1100,77 @@ def test_show_notebook_hides_other_users_notebook(client, app, db_session):
     response = client.get(f"/notebooks/{notebook.id}", headers=_headers(app, user))
 
     assert response.status_code == 404
+
+
+def test_reindex_notebook_resets_files_and_deletes_vectors(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    first_file = NotebookFileFactory(notebook=notebook, status="active", error_message="old error")
+    second_file = NotebookFileFactory(notebook=notebook, status="failed", error_message="parse failed")
+    first_vector = NotebookVectorFactory(
+        notebook=notebook,
+        notebook_file=first_file,
+        embedding_config=notebook.embedding_config,
+    )
+    second_vector = NotebookVectorFactory(
+        notebook=notebook,
+        notebook_file=second_file,
+        embedding_config=notebook.embedding_config,
+    )
+    first_file_id = first_file.id
+    second_file_id = second_file.id
+    first_vector_id = first_vector.id
+    second_vector_id = second_vector.id
+
+    response = client.post(f"/notebooks/{notebook.id}/reindex", headers=_headers(app, user))
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "ok", "files": 2, "deleted_vectors": 2}
+    db_session.expire_all()
+    assert db_session.get(NotebookVector, first_vector_id) is None
+    assert db_session.get(NotebookVector, second_vector_id) is None
+    assert db_session.get(NotebookFile, first_file_id).status == "pending"
+    assert db_session.get(NotebookFile, first_file_id).error_message is None
+    assert db_session.get(NotebookFile, second_file_id).status == "pending"
+    assert db_session.get(NotebookFile, second_file_id).error_message is None
+
+
+def test_reindex_notebook_hides_other_users_notebook(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory()
+    notebook_file = NotebookFileFactory(notebook=notebook, status="active")
+    vector = NotebookVectorFactory(
+        notebook=notebook,
+        notebook_file=notebook_file,
+        embedding_config=notebook.embedding_config,
+    )
+
+    response = client.post(f"/notebooks/{notebook.id}/reindex", headers=_headers(app, user))
+
+    assert response.status_code == 404
+    db_session.expire_all()
+    assert db_session.get(NotebookFile, notebook_file.id).status == "active"
+    assert db_session.get(NotebookVector, vector.id) is not None
+
+
+def test_admin_can_reindex_other_users_notebook(client, app, db_session):
+    admin = UserFactory(role="admin")
+    notebook = NotebookFactory()
+    notebook_file = NotebookFileFactory(notebook=notebook, status="active")
+    vector = NotebookVectorFactory(
+        notebook=notebook,
+        notebook_file=notebook_file,
+        embedding_config=notebook.embedding_config,
+    )
+    notebook_file_id = notebook_file.id
+    vector_id = vector.id
+
+    response = client.post(f"/notebooks/{notebook.id}/reindex", headers=_headers(app, admin))
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(NotebookFile, notebook_file_id).status == "pending"
+    assert db_session.get(NotebookVector, vector_id) is None
 
 
 def test_delete_notebook_allows_owner_and_clears_vectors_and_unused_embedding_config(client, app, db_session):
