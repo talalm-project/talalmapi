@@ -10,6 +10,7 @@ from app.models.embedding_config import EmbeddingConfig
 from app.models.notebook import Notebook
 from app.models.notebook_vector import NotebookVector
 from app.models.user import User
+from app.operations.embedding_configs import Resolve as ResolveEmbeddingConfig
 from app.operations.notebooks import Save
 from app.schemas.notebook import NotebookCollection, NotebookCreate, NotebookOut
 
@@ -79,6 +80,7 @@ def index(
         if total > 0
         else []
     )
+    _ensure_embedding_configs(session, notebooks)
 
     return {
         "records": [notebook.to_dict() for notebook in notebooks],
@@ -99,6 +101,7 @@ def show(
     if notebook is None or notebook.user_id != current_user.id:
         return JSONResponse(status_code=404, content={"message": "not found"})
 
+    _ensure_embedding_configs(session, [notebook])
     return notebook.to_dict(include_connector=True)
 
 
@@ -117,13 +120,33 @@ def delete(
     session.delete(notebook)
     session.flush()
 
-    if _embedding_config_unused(session, embedding_config_id):
+    if embedding_config_id is not None and _embedding_config_unused(session, embedding_config_id):
         embedding_config = session.get(EmbeddingConfig, embedding_config_id)
         if embedding_config is not None:
             session.delete(embedding_config)
 
     session.commit()
     return {"message": "ok"}
+
+
+def _ensure_embedding_configs(session, notebooks):
+    changed = False
+    for notebook in notebooks:
+        if notebook.embedding_config_id is not None:
+            continue
+
+        operation = ResolveEmbeddingConfig(session=session, connector=notebook.connector)
+        operation.execute()
+        if operation.invalid():
+            continue
+
+        notebook.embedding_config_id = operation.embedding_config.id
+        changed = True
+
+    if changed:
+        session.commit()
+        for notebook in notebooks:
+            session.refresh(notebook)
 
 
 def _embedding_config_unused(session, embedding_config_id):

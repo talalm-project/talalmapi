@@ -51,4 +51,4 @@ def test_notebook_to_dict_returns_public_fields(db_session):
 
 
 def test_allowed_notebook_statuses():
-    assert ALLOWED_NOTEBOOK_STATUSES == {"pending", "active"}
+    assert ALLOWED_NOTEBOOK_STATUSES == {"pending", "processing", "active", "failed"}

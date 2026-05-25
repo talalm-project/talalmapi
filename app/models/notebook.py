@@ -9,7 +9,7 @@ from app.db import Base
 from app.models.user import utcnow
 
 
-ALLOWED_NOTEBOOK_STATUSES = {"pending", "active"}
+ALLOWED_NOTEBOOK_STATUSES = {"pending", "processing", "active", "failed"}
 
 
 class Notebook(Base):
@@ -30,10 +30,10 @@ class Notebook(Base):
         nullable=False,
         index=True,
     )
-    embedding_config_id: Mapped[str] = mapped_column(
+    embedding_config_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("embedding_configs.id"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")

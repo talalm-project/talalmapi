@@ -274,6 +274,45 @@ def test_show_notebook_allows_owner(client, app, db_session):
     }
 
 
+def test_show_notebook_backfills_legacy_embedding_config(client, app, db_session):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user)
+    notebook = Notebook(
+        title="Legacy Notebook",
+        user=user,
+        connector=connector,
+        embedding_config_id=None,
+    )
+    db_session.add(notebook)
+    db_session.commit()
+
+    response = client.get(f"/notebooks/{notebook.id}", headers=_headers(app, user))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["embedding_config_id"]
+    db_session.expire_all()
+    assert db_session.get(Notebook, notebook.id).embedding_config_id == payload["embedding_config_id"]
+
+
+def test_show_notebook_allows_legacy_missing_embedding_config(client, app, db_session):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user, embedding_name=None, data={})
+    notebook = Notebook(
+        title="Incomplete Legacy Notebook",
+        user=user,
+        connector=connector,
+        embedding_config_id=None,
+    )
+    db_session.add(notebook)
+    db_session.commit()
+
+    response = client.get(f"/notebooks/{notebook.id}", headers=_headers(app, user))
+
+    assert response.status_code == 200
+    assert response.json()["embedding_config_id"] is None
+
+
 def test_show_notebook_hides_other_users_notebook(client, app, db_session):
     user = UserFactory(role="user")
     notebook = NotebookFactory()
