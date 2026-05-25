@@ -1,4 +1,5 @@
 from app.helpers.api_helpers import build_jwt_header, generate_jwt
+from app.models.embedding_config import EmbeddingConfig
 from app.models.notebook import Notebook
 from spec.factories import ConnectorFactory, NotebookFactory, UserFactory
 
@@ -16,6 +17,14 @@ def test_create_notebook_assigns_current_user_and_copies_connector_data(client, 
             "metadata": {
                 "provider": "local",
                 "inference": {"model": {"name": "Local Llama"}},
+                "embeddings": {
+                    "model": {
+                        "name": "Local Embedding",
+                        "local_file_path": "/tmp/local-embedding.gguf",
+                        "embedding_size": 384,
+                    },
+                    "model_options": {"n_ctx": 2048},
+                },
             }
         },
     )
@@ -34,14 +43,60 @@ def test_create_notebook_assigns_current_user_and_copies_connector_data(client, 
     assert payload["title"] == "Contract Research"
     assert payload["user_id"] == user.id
     assert payload["connector_id"] == connector.id
+    assert payload["embedding_config_id"]
     assert payload["status"] == "pending"
     assert payload["data"] == {"connector": connector.data}
 
     notebook = db_session.get(Notebook, payload["id"])
+    embedding_config = db_session.get(EmbeddingConfig, payload["embedding_config_id"])
     assert notebook.user_id == user.id
     assert notebook.connector_id == connector.id
+    assert notebook.embedding_config_id == embedding_config.id
     assert notebook.data == {"connector": connector.data}
     assert notebook.status == "pending"
+    assert embedding_config.connector_id == connector.id
+    assert embedding_config.provider == "local"
+    assert embedding_config.model_name == "Local Embedding"
+    assert embedding_config.model_path == "/tmp/local-embedding.gguf"
+    assert embedding_config.dimensions == 384
+    assert embedding_config.options == {"n_ctx": 2048}
+
+
+def test_create_notebook_reuses_existing_embedding_config(client, app, db_session):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(
+        user=user,
+        embedding_name="text-embedding-3-small",
+        data={
+            "metadata": {
+                "provider": "openai",
+                "embeddings": {
+                    "model": {
+                        "name": "text-embedding-3-small",
+                        "local_file_path": None,
+                        "embedding_size": 1536,
+                    },
+                    "model_options": {},
+                },
+            }
+        },
+    )
+
+    first_response = client.post(
+        "/notebooks",
+        headers=_headers(app, user),
+        json={"title": "First", "connector_id": connector.id},
+    )
+    second_response = client.post(
+        "/notebooks",
+        headers=_headers(app, user),
+        json={"title": "Second", "connector_id": connector.id},
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+    assert first_response.json()["embedding_config_id"] == second_response.json()["embedding_config_id"]
+    assert db_session.query(EmbeddingConfig).count() == 1
 
 
 def test_create_notebook_requires_title(client, app, db_session):
@@ -104,6 +159,7 @@ def test_list_notebooks_only_returns_current_users_notebooks(client, app, db_ses
             "data": {},
             "user_id": user.id,
             "connector_id": connector.id,
+            "embedding_config_id": owned.embedding_config_id,
             "status": "pending",
         }
     ]
@@ -211,6 +267,7 @@ def test_show_notebook_allows_owner(client, app, db_session):
         "data": {},
         "user_id": user.id,
         "connector_id": connector.id,
+        "embedding_config_id": notebook.embedding_config_id,
         "status": "pending",
         "connector": connector.to_dict(),
     }

@@ -41,6 +41,7 @@ class Connector(Base):
 
     user = relationship("User", back_populates="connectors")
     notebooks = relationship("Notebook", back_populates="connector")
+    embedding_configs = relationship("EmbeddingConfig", back_populates="connector")
 
     def to_dict(self):
         return {

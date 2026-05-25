@@ -24,6 +24,7 @@ class NotebookListOut(BaseModel):
     data: dict
     user_id: str
     connector_id: str
+    embedding_config_id: str
     status: str
 
 

@@ -1,5 +1,5 @@
 from app.models.notebook import ALLOWED_NOTEBOOK_STATUSES, Notebook
-from spec.factories import ConnectorFactory, NotebookFactory
+from spec.factories import ConnectorFactory, EmbeddingConfigFactory, NotebookFactory
 
 
 def test_notebook_factory_creates_notebook(db_session):
@@ -13,6 +13,7 @@ def test_notebook_factory_creates_notebook(db_session):
     assert notebook.user == connector.user
     assert notebook.connector_id == connector.id
     assert notebook.connector == connector
+    assert notebook.embedding_config_id == notebook.embedding_config.id
     assert notebook.status == "pending"
     assert notebook.created_at is not None
     assert notebook.updated_at is not None
@@ -20,7 +21,13 @@ def test_notebook_factory_creates_notebook(db_session):
 
 def test_notebook_defaults(db_session):
     connector = ConnectorFactory()
-    notebook = Notebook(title="Defaulted Notebook", user=connector.user, connector=connector)
+    embedding_config = EmbeddingConfigFactory(connector=connector)
+    notebook = Notebook(
+        title="Defaulted Notebook",
+        user=connector.user,
+        connector=connector,
+        embedding_config=embedding_config,
+    )
 
     db_session.add(notebook)
     db_session.commit()
@@ -38,6 +45,7 @@ def test_notebook_to_dict_returns_public_fields(db_session):
         "data": {"copied": True},
         "user_id": notebook.user_id,
         "connector_id": notebook.connector_id,
+        "embedding_config_id": notebook.embedding_config_id,
         "status": "active",
     }
 

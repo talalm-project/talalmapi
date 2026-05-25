@@ -1,17 +1,20 @@
 import os
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app import create_app
 from app.db import Base, db
 from app.helpers.api_helpers import build_jwt_header, generate_jwt
-from spec.factories import ConnectorFactory, NotebookFactory, UserFactory
+from spec.factories import ConnectorFactory, EmbeddingConfigFactory, NotebookFactory, NotebookVectorFactory, UserFactory
 
 
 @pytest.fixture()
 def app():
     os.environ["APP_ENV"] = "test"
     application = create_app("spec.settings.TestConfig")
+    with db.engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(bind=db.engine)
     yield application
     Base.metadata.drop_all(bind=db.engine)
@@ -26,12 +29,16 @@ def client(app):
 def db_session(app):
     session = db.session()
     ConnectorFactory._meta.sqlalchemy_session = session
+    EmbeddingConfigFactory._meta.sqlalchemy_session = session
     NotebookFactory._meta.sqlalchemy_session = session
+    NotebookVectorFactory._meta.sqlalchemy_session = session
     UserFactory._meta.sqlalchemy_session = session
     yield session
     session.close()
     ConnectorFactory._meta.sqlalchemy_session = None
+    EmbeddingConfigFactory._meta.sqlalchemy_session = None
     NotebookFactory._meta.sqlalchemy_session = None
+    NotebookVectorFactory._meta.sqlalchemy_session = None
     UserFactory._meta.sqlalchemy_session = None
 
 

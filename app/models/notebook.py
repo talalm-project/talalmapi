@@ -30,6 +30,12 @@ class Notebook(Base):
         nullable=False,
         index=True,
     )
+    embedding_config_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("embedding_configs.id"),
+        nullable=False,
+        index=True,
+    )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -41,6 +47,8 @@ class Notebook(Base):
 
     user = relationship("User", back_populates="notebooks")
     connector = relationship("Connector", back_populates="notebooks")
+    embedding_config = relationship("EmbeddingConfig", back_populates="notebooks")
+    vectors = relationship("NotebookVector", back_populates="notebook")
 
     def to_dict(self, include_connector=False):
         payload = {
@@ -49,6 +57,7 @@ class Notebook(Base):
             "data": self.data,
             "user_id": self.user_id,
             "connector_id": self.connector_id,
+            "embedding_config_id": self.embedding_config_id,
             "status": self.status,
         }
 

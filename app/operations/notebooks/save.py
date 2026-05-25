@@ -2,6 +2,7 @@ from copy import deepcopy
 
 from app.models.connector import Connector
 from app.models.notebook import Notebook
+from app.operations.embedding_configs import Resolve as ResolveEmbeddingConfig
 from app.operations.validator import Validator
 
 
@@ -23,16 +24,22 @@ class Save(Validator):
         self.payload = {
             "title": [],
             "connector_id": [],
+            "embedding_config": [],
         }
 
     def execute(self):
         self._validate()
 
         if self.valid():
+            embedding_config = self._resolve_embedding_config()
+            if self.invalid():
+                return
+
             self.notebook = Notebook(
                 title=self.title.strip(),
                 user_id=self.user.id,
                 connector_id=self.connector.id,
+                embedding_config_id=embedding_config.id,
                 data={"connector": deepcopy(self.connector.data or {})},
                 status="pending",
             )
@@ -52,3 +59,13 @@ class Save(Validator):
                 self.payload["connector_id"].append("not found")
 
         self.count_errors()
+
+    def _resolve_embedding_config(self):
+        operation = ResolveEmbeddingConfig(session=self.session, connector=self.connector)
+        operation.execute()
+        if operation.invalid():
+            self.payload["embedding_config"].append(operation.payload)
+            self.count_errors()
+            return None
+
+        return operation.embedding_config

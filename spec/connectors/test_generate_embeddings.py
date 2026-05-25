@@ -156,6 +156,7 @@ def test_generate_embeddings_openai_connector_returns_records(client, app, db_se
     assert captured["create"] == {
         "model": "text-embedding-3-small",
         "input": ["hello openai"],
+        "dimensions": 1536,
     }
 
 
