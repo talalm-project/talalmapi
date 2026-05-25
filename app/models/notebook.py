@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -10,6 +10,11 @@ from app.models.user import utcnow
 
 
 ALLOWED_NOTEBOOK_STATUSES = {"pending", "processing", "active", "failed"}
+DEFAULT_NOTEBOOK_SYSTEM_PROMPT = (
+    "You are answering questions about a notebook. Use only the provided context pulled from the notebook files. "
+    "If no context is provided, or if the user's question cannot be answered from that context, answer exactly: "
+    "I don't know."
+)
 
 
 class Notebook(Base):
@@ -17,6 +22,7 @@ class Notebook(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default=DEFAULT_NOTEBOOK_SYSTEM_PROMPT)
     data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     user_id: Mapped[str] = mapped_column(
         String(36),
@@ -48,12 +54,14 @@ class Notebook(Base):
     user = relationship("User", back_populates="notebooks")
     connector = relationship("Connector", back_populates="notebooks")
     embedding_config = relationship("EmbeddingConfig", back_populates="notebooks")
+    files = relationship("NotebookFile", back_populates="notebook")
     vectors = relationship("NotebookVector", back_populates="notebook")
 
     def to_dict(self, include_connector=False):
         payload = {
             "id": self.id,
             "title": self.title,
+            "system_prompt": self.system_prompt,
             "data": self.data,
             "user_id": self.user_id,
             "connector_id": self.connector_id,

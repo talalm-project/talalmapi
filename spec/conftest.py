@@ -6,7 +6,14 @@ from sqlalchemy import text
 from app import create_app
 from app.db import Base, db
 from app.helpers.api_helpers import build_jwt_header, generate_jwt
-from spec.factories import ConnectorFactory, EmbeddingConfigFactory, NotebookFactory, NotebookVectorFactory, UserFactory
+from spec.factories import (
+    ConnectorFactory,
+    EmbeddingConfigFactory,
+    NotebookFactory,
+    NotebookFileFactory,
+    NotebookVectorFactory,
+    UserFactory,
+)
 
 
 @pytest.fixture()
@@ -31,6 +38,7 @@ def db_session(app):
     ConnectorFactory._meta.sqlalchemy_session = session
     EmbeddingConfigFactory._meta.sqlalchemy_session = session
     NotebookFactory._meta.sqlalchemy_session = session
+    NotebookFileFactory._meta.sqlalchemy_session = session
     NotebookVectorFactory._meta.sqlalchemy_session = session
     UserFactory._meta.sqlalchemy_session = session
     yield session
@@ -38,6 +46,7 @@ def db_session(app):
     ConnectorFactory._meta.sqlalchemy_session = None
     EmbeddingConfigFactory._meta.sqlalchemy_session = None
     NotebookFactory._meta.sqlalchemy_session = None
+    NotebookFileFactory._meta.sqlalchemy_session = None
     NotebookVectorFactory._meta.sqlalchemy_session = None
     UserFactory._meta.sqlalchemy_session = None
 

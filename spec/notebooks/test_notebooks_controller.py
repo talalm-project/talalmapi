@@ -1,8 +1,11 @@
+from types import SimpleNamespace
+
 from app.helpers.api_helpers import build_jwt_header, generate_jwt
 from app.models.embedding_config import EmbeddingConfig
-from app.models.notebook import Notebook
+from app.models.notebook import DEFAULT_NOTEBOOK_SYSTEM_PROMPT, Notebook
+from app.models.notebook_file import NotebookFile
 from app.models.notebook_vector import NotebookVector
-from spec.factories import ConnectorFactory, NotebookFactory, NotebookVectorFactory, UserFactory
+from spec.factories import ConnectorFactory, NotebookFactory, NotebookFileFactory, NotebookVectorFactory, UserFactory
 
 
 def _headers(app, user):
@@ -35,6 +38,7 @@ def test_create_notebook_assigns_current_user_and_copies_connector_data(client, 
         headers=_headers(app, user),
         json={
             "title": "Contract Research",
+            "system_prompt": "Use the contract documents as the source of truth.",
             "connector_id": connector.id,
         },
     )
@@ -42,6 +46,7 @@ def test_create_notebook_assigns_current_user_and_copies_connector_data(client, 
     assert response.status_code == 201
     payload = response.json()
     assert payload["title"] == "Contract Research"
+    assert payload["system_prompt"] == "Use the contract documents as the source of truth."
     assert payload["user_id"] == user.id
     assert payload["connector_id"] == connector.id
     assert payload["embedding_config_id"]
@@ -51,6 +56,7 @@ def test_create_notebook_assigns_current_user_and_copies_connector_data(client, 
     notebook = db_session.get(Notebook, payload["id"])
     embedding_config = db_session.get(EmbeddingConfig, payload["embedding_config_id"])
     assert notebook.user_id == user.id
+    assert notebook.system_prompt == "Use the contract documents as the source of truth."
     assert notebook.connector_id == connector.id
     assert notebook.embedding_config_id == embedding_config.id
     assert notebook.data == {"connector": connector.data}
@@ -61,6 +67,26 @@ def test_create_notebook_assigns_current_user_and_copies_connector_data(client, 
     assert embedding_config.model_path == "/tmp/local-embedding.gguf"
     assert embedding_config.dimensions == 384
     assert embedding_config.options == {"n_ctx": 2048}
+
+
+def test_create_notebook_uses_default_system_prompt_when_blank(client, app, db_session):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user)
+
+    response = client.post(
+        "/notebooks",
+        headers=_headers(app, user),
+        json={
+            "title": "Blank Prompt",
+            "system_prompt": "   ",
+            "connector_id": connector.id,
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["system_prompt"] == DEFAULT_NOTEBOOK_SYSTEM_PROMPT
+    assert db_session.get(Notebook, payload["id"]).system_prompt == DEFAULT_NOTEBOOK_SYSTEM_PROMPT
 
 
 def test_create_notebook_reuses_existing_embedding_config(client, app, db_session):
@@ -157,6 +183,7 @@ def test_list_notebooks_only_returns_current_users_notebooks(client, app, db_ses
         {
             "id": owned.id,
             "title": "Owned Notebook",
+            "system_prompt": DEFAULT_NOTEBOOK_SYSTEM_PROMPT,
             "data": {},
             "user_id": user.id,
             "connector_id": connector.id,
@@ -257,7 +284,12 @@ def test_list_notebooks_filters_by_status(client, app, db_session):
 def test_show_notebook_allows_owner(client, app, db_session):
     user = UserFactory(role="user")
     connector = ConnectorFactory(user=user)
-    notebook = NotebookFactory(user=user, connector=connector, title="Owned Notebook")
+    notebook = NotebookFactory(
+        user=user,
+        connector=connector,
+        title="Owned Notebook",
+        system_prompt="Keep answers grounded in the notebook.",
+    )
 
     response = client.get(f"/notebooks/{notebook.id}", headers=_headers(app, user))
 
@@ -265,6 +297,7 @@ def test_show_notebook_allows_owner(client, app, db_session):
     assert response.json() == {
         "id": notebook.id,
         "title": "Owned Notebook",
+        "system_prompt": "Keep answers grounded in the notebook.",
         "data": {},
         "user_id": user.id,
         "connector_id": connector.id,
@@ -313,6 +346,434 @@ def test_show_notebook_allows_legacy_missing_embedding_config(client, app, db_se
     assert response.json()["embedding_config_id"] is None
 
 
+def test_infer_notebook_uses_notebook_connector_and_system_prompt(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user, connection_type="local", local_file_path="/tmp/model.gguf")
+    notebook = NotebookFactory(
+        user=user,
+        connector=connector,
+        system_prompt="Answer only from this notebook.",
+    )
+    captured = {}
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            captured["init"] = kwargs
+
+        def create_chat_completion(self, **kwargs):
+            captured["completion"] = kwargs
+            return {
+                "choices": [{"message": {"role": "assistant", "content": "notebook answer"}, "finish_reason": "stop"}],
+                "usage": {"total_tokens": 4},
+            }
+
+    monkeypatch.setattr("app.operations.connectors.infer._llama_class", lambda: FakeLlama)
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/infer",
+        headers=_headers(app, user),
+        json={"prompt": "Summarize", "options": {"max_tokens": 16}},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["response"] == {
+        "choices": [{"message": {"role": "assistant", "content": "notebook answer"}, "finish_reason": "stop"}],
+        "usage": {"total_tokens": 4},
+    }
+    assert captured["init"] == {"model_path": "/tmp/model.gguf"}
+    assert captured["completion"] == {
+        "messages": [
+            {"role": "system", "content": "Answer only from this notebook."},
+            {"role": "user", "content": "Summarize"},
+        ],
+        "max_tokens": 16,
+    }
+
+
+def test_infer_notebook_uses_system_prompt_as_openai_instructions(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(
+        user=user,
+        name="gpt-4.1",
+        connection_type="openai",
+        local_file_path=None,
+        api_key="sk-secret",
+    )
+    notebook = NotebookFactory(
+        user=user,
+        connector=connector,
+        system_prompt="Use notebook context before general knowledge.",
+    )
+    captured = {}
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            captured["create"] = kwargs
+            return SimpleNamespace(
+                model_dump=lambda mode: {
+                    "id": "resp_notebook",
+                    "status": "completed",
+                    "mode": mode,
+                }
+            )
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured["init"] = kwargs
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr("app.operations.connectors.infer._openai_client_class", lambda: FakeOpenAI)
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/infer",
+        headers=_headers(app, user),
+        json={"input": "Summarize"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["response"] == {
+        "id": "resp_notebook",
+        "status": "completed",
+        "mode": "json",
+    }
+    assert captured["init"] == {"api_key": "sk-secret"}
+    assert captured["create"] == {
+        "model": "gpt-4.1",
+        "input": "Summarize",
+        "instructions": "Use notebook context before general knowledge.",
+    }
+
+
+def test_infer_notebook_hides_other_users_notebook(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory()
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/infer",
+        headers=_headers(app, user),
+        json={"prompt": "Summarize"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_admin_can_infer_against_other_users_notebook(client, app, db_session, monkeypatch):
+    admin = UserFactory(role="admin")
+    notebook = NotebookFactory(system_prompt="Admin-visible prompt.")
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            pass
+
+        def create_chat_completion(self, **kwargs):
+            return {"messages": kwargs["messages"]}
+
+    monkeypatch.setattr("app.operations.connectors.infer._llama_class", lambda: FakeLlama)
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/infer",
+        headers=_headers(app, admin),
+        json={"prompt": "Summarize"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["response"] == {
+        "messages": [
+            {"role": "system", "content": "Admin-visible prompt."},
+            {"role": "user", "content": "Summarize"},
+        ]
+    }
+
+
+def test_create_notebook_file_uploads_supported_file_to_rustfs(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    captured = {}
+
+    def fake_store_file_at_key(upload, settings, key, filename=None):
+        captured["upload_filename"] = upload.filename
+        captured["content_type"] = upload.content_type
+        captured["key"] = key
+        captured["filename"] = filename
+        captured["bucket"] = settings.STORAGE_S3_BUCKET
+        return {
+            "key": key,
+            "filename": "notes.pdf",
+            "content_type": "application/pdf",
+            "byte_size": None,
+            "url": f"http://localhost:9000/talalm-test/{key}",
+        }
+
+    monkeypatch.setattr("app.operations.notebooks.create_file.generate_object_key", lambda: "random-object-key")
+    monkeypatch.setattr("app.operations.notebooks.create_file.store_file_at_key", fake_store_file_at_key)
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/notebook_files",
+        headers=_headers(app, user),
+        data={"name": "Research Notes"},
+        files={"file": ("notes.pdf", b"hello pdf", "application/pdf")},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["notebook_id"] == notebook.id
+    assert payload["name"] == "Research Notes"
+    assert payload["filename"] == "notes.pdf"
+    assert payload["content_type"] == "application/pdf"
+    assert payload["byte_size"] == 9
+    assert payload["object_key"] == "random-object-key"
+    assert payload["checksum"] == "9f275d73a74baf528734b92128a320df66ae66dab4935c842d8c3879d498e3f4"
+    assert payload["status"] == "pending"
+    assert payload["error_message"] is None
+    assert payload["data"] == {"url": "http://localhost:9000/talalm-test/random-object-key"}
+    assert captured == {
+        "upload_filename": "notes.pdf",
+        "content_type": "application/pdf",
+        "key": "random-object-key",
+        "filename": "notes.pdf",
+        "bucket": "talalm-test",
+    }
+
+    notebook_file = db_session.get(NotebookFile, payload["id"])
+    assert notebook_file.notebook_id == notebook.id
+    assert notebook_file.object_key == "random-object-key"
+
+
+def test_list_notebook_files_returns_current_users_files(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    older = NotebookFileFactory(notebook=notebook, name="Older", filename="older.pdf")
+    newer = NotebookFileFactory(notebook=notebook, name="Newer", filename="newer.txt")
+    NotebookFileFactory()
+
+    response = client.get(f"/notebooks/{notebook.id}/notebook_files", headers=_headers(app, user))
+
+    assert response.status_code == 200
+    assert response.json()["records"] == [
+        newer.to_dict(),
+        older.to_dict(),
+    ]
+
+
+def test_list_notebook_files_hides_other_users_notebook(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory()
+    NotebookFileFactory(notebook=notebook)
+
+    response = client.get(f"/notebooks/{notebook.id}/notebook_files", headers=_headers(app, user))
+
+    assert response.status_code == 404
+
+
+def test_admin_can_list_notebook_files_for_other_users_notebook(client, app, db_session):
+    admin = UserFactory(role="admin")
+    notebook = NotebookFactory()
+    notebook_file = NotebookFileFactory(notebook=notebook)
+
+    response = client.get(f"/notebooks/{notebook.id}/notebook_files", headers=_headers(app, admin))
+
+    assert response.status_code == 200
+    assert response.json()["records"] == [notebook_file.to_dict()]
+
+
+def test_create_notebook_file_requires_name(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/notebook_files",
+        headers=_headers(app, user),
+        data={"name": " "},
+        files={"file": ("notes.txt", b"hello", "text/plain")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["name"] == ["required"]
+
+
+def test_create_notebook_file_rejects_unsupported_file_type(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/notebook_files",
+        headers=_headers(app, user),
+        data={"name": "Image"},
+        files={"file": ("image.png", b"png", "image/png")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["file"] == ["unsupported file type"]
+
+
+def test_create_notebook_file_hides_other_users_notebook(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory()
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/notebook_files",
+        headers=_headers(app, user),
+        data={"name": "Notes"},
+        files={"file": ("notes.txt", b"hello", "text/plain")},
+    )
+
+    assert response.status_code == 404
+
+
+def test_admin_can_create_notebook_file_for_other_users_notebook(client, app, db_session, monkeypatch):
+    admin = UserFactory(role="admin")
+    notebook = NotebookFactory()
+
+    monkeypatch.setattr("app.operations.notebooks.create_file.generate_object_key", lambda: "admin-object-key")
+    monkeypatch.setattr(
+        "app.operations.notebooks.create_file.store_file_at_key",
+        lambda upload, settings, key, filename=None: {
+            "key": key,
+            "filename": filename,
+            "content_type": upload.content_type,
+            "byte_size": None,
+            "url": f"http://localhost:9000/talalm-test/{key}",
+        },
+    )
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/notebook_files",
+        headers=_headers(app, admin),
+        data={"name": "Admin Notes"},
+        files={"file": ("notes.txt", b"hello", "text/plain")},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["object_key"] == "admin-object-key"
+
+
+def test_delete_notebook_file_removes_rustfs_object_and_related_vectors(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    notebook_file = NotebookFileFactory(notebook=notebook, object_key="notebooks/file-key")
+    vector = NotebookVectorFactory(
+        notebook=notebook,
+        notebook_file=notebook_file,
+        embedding_config=notebook.embedding_config,
+    )
+    notebook_id = notebook.id
+    notebook_file_id = notebook_file.id
+    vector_id = vector.id
+    deleted = {}
+
+    def fake_delete_file(settings, key):
+        deleted["bucket"] = settings.STORAGE_S3_BUCKET
+        deleted["key"] = key
+
+    monkeypatch.setattr("app.operations.notebooks.destroy_file.delete_file", fake_delete_file)
+
+    response = client.delete(
+        f"/notebooks/{notebook_id}/notebook_files/{notebook_file_id}",
+        headers=_headers(app, user),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "ok"}
+    assert deleted == {"bucket": "talalm-test", "key": "notebooks/file-key"}
+    db_session.expire_all()
+    assert db_session.get(NotebookFile, notebook_file_id) is None
+    assert db_session.get(NotebookVector, vector_id) is None
+    assert db_session.get(Notebook, notebook_id) is not None
+
+
+def test_delete_notebook_file_allows_active_status(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    notebook_file = NotebookFileFactory(notebook=notebook, object_key="active-file-key", status="active")
+    notebook_file_id = notebook_file.id
+
+    monkeypatch.setattr("app.operations.notebooks.destroy_file.delete_file", lambda settings, key: None)
+
+    response = client.delete(
+        f"/notebooks/{notebook.id}/notebook_files/{notebook_file.id}",
+        headers=_headers(app, user),
+    )
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(NotebookFile, notebook_file_id) is None
+
+
+def test_delete_notebook_file_rejects_non_deletable_status(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    notebook_file = NotebookFileFactory(notebook=notebook, object_key="processing-file-key", status="processing")
+    deleted = {"called": False}
+
+    monkeypatch.setattr(
+        "app.operations.notebooks.destroy_file.delete_file",
+        lambda settings, key: deleted.update({"called": True}),
+    )
+
+    response = client.delete(
+        f"/notebooks/{notebook.id}/notebook_files/{notebook_file.id}",
+        headers=_headers(app, user),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["status"] == ["cannot delete"]
+    assert deleted == {"called": False}
+    assert db_session.get(NotebookFile, notebook_file.id) is not None
+
+
+def test_delete_notebook_file_hides_other_users_notebook(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory()
+    notebook_file = NotebookFileFactory(notebook=notebook)
+
+    response = client.delete(
+        f"/notebooks/{notebook.id}/notebook_files/{notebook_file.id}",
+        headers=_headers(app, user),
+    )
+
+    assert response.status_code == 404
+    assert db_session.get(NotebookFile, notebook_file.id) is not None
+
+
+def test_delete_notebook_file_rejects_file_from_different_notebook(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    other_notebook = NotebookFactory(user=user)
+    notebook_file = NotebookFileFactory(notebook=other_notebook)
+
+    response = client.delete(
+        f"/notebooks/{notebook.id}/notebook_files/{notebook_file.id}",
+        headers=_headers(app, user),
+    )
+
+    assert response.status_code == 404
+    assert db_session.get(NotebookFile, notebook_file.id) is not None
+
+
+def test_admin_can_delete_notebook_file_for_other_users_notebook(client, app, db_session, monkeypatch):
+    admin = UserFactory(role="admin")
+    notebook = NotebookFactory()
+    notebook_file = NotebookFileFactory(notebook=notebook, object_key="admin-file-key")
+    notebook_id = notebook.id
+    notebook_file_id = notebook_file.id
+    deleted = {}
+
+    monkeypatch.setattr(
+        "app.operations.notebooks.destroy_file.delete_file",
+        lambda settings, key: deleted.update({"bucket": settings.STORAGE_S3_BUCKET, "key": key}),
+    )
+
+    response = client.delete(
+        f"/notebooks/{notebook_id}/notebook_files/{notebook_file_id}",
+        headers=_headers(app, admin),
+    )
+
+    assert response.status_code == 200
+    assert deleted == {"bucket": "talalm-test", "key": "admin-file-key"}
+    db_session.expire_all()
+    assert db_session.get(NotebookFile, notebook_file_id) is None
+
+
 def test_show_notebook_hides_other_users_notebook(client, app, db_session):
     user = UserFactory(role="user")
     notebook = NotebookFactory()
@@ -327,7 +788,9 @@ def test_delete_notebook_allows_owner_and_clears_vectors_and_unused_embedding_co
     notebook = NotebookFactory(user=user)
     notebook_id = notebook.id
     embedding_config_id = notebook.embedding_config_id
+    notebook_file = NotebookFileFactory(notebook=notebook)
     vector = NotebookVectorFactory(notebook=notebook, embedding_config=notebook.embedding_config)
+    notebook_file_id = notebook_file.id
     vector_id = vector.id
 
     response = client.delete(f"/notebooks/{notebook_id}", headers=_headers(app, user))
@@ -336,6 +799,7 @@ def test_delete_notebook_allows_owner_and_clears_vectors_and_unused_embedding_co
     assert response.json() == {"message": "ok"}
     db_session.expire_all()
     assert db_session.get(Notebook, notebook_id) is None
+    assert db_session.get(NotebookFile, notebook_file_id) is None
     assert db_session.get(NotebookVector, vector_id) is None
     assert db_session.get(EmbeddingConfig, embedding_config_id) is None
 

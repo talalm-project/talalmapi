@@ -1,21 +1,16 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete as sql_delete
-from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies.auth import require_active_user
-from app.models.embedding_config import EmbeddingConfig
-from app.models.notebook import Notebook
-from app.models.notebook_vector import NotebookVector
 from app.models.user import User
-from app.operations.embedding_configs import Resolve as ResolveEmbeddingConfig
-from app.operations.notebooks import Save
+from app.operations.notebooks import CreateFile, Destroy, DestroyFile, Index, IndexFiles, Infer, Save, Show
+from app.schemas.connector import ConnectorInfer
+from app.schemas.notebook_file import NotebookFileCollection, NotebookFileOut
 from app.schemas.notebook import NotebookCollection, NotebookCreate, NotebookOut
 
 
-ITEMS_PER_PAGE = 15
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 
 
@@ -29,6 +24,7 @@ def create(
         session=session,
         user=current_user,
         title=payload.title,
+        system_prompt=payload.system_prompt,
         connector_id=payload.connector_id,
     )
     operation.execute()
@@ -47,48 +43,16 @@ def index(
     current_user: User = Depends(require_active_user),
     session: Session = Depends(get_db),
 ):
-    page = max(page, 1)
-    filters = [Notebook.user_id == current_user.id]
-
-    if query:
-        pattern = f"%{query}%"
-        filters.append(
-            or_(
-                Notebook.title.ilike(pattern),
-                Notebook.status.ilike(pattern),
-            )
-        )
-    if title:
-        filters.append(Notebook.title.ilike(f"%{title}%"))
-    if status:
-        filters.append(Notebook.status == status)
-
-    count_stmt = select(func.count()).select_from(Notebook)
-    notebooks_stmt = select(Notebook).order_by(Notebook.created_at.desc())
-    for entry in filters:
-        count_stmt = count_stmt.where(entry)
-        notebooks_stmt = notebooks_stmt.where(entry)
-
-    total = session.scalar(count_stmt) or 0
-    total_pages = max((total + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE, 1)
-    notebooks = (
-        session.execute(
-            notebooks_stmt.offset((page - 1) * ITEMS_PER_PAGE).limit(ITEMS_PER_PAGE)
-        )
-        .scalars()
-        .all()
-        if total > 0
-        else []
+    operation = Index(
+        session=session,
+        user=current_user,
+        query=query,
+        title=title,
+        status=status,
+        page=page,
     )
-    _ensure_embedding_configs(session, notebooks)
-
-    return {
-        "records": [notebook.to_dict() for notebook in notebooks],
-        "total_pages": total_pages,
-        "current_page": page,
-        "next_page": page + 1 if page < total_pages else None,
-        "prev_page": page - 1 if page > 1 else None,
-    }
+    operation.execute()
+    return operation.to_dict()
 
 
 @router.get("/{notebook_id}", response_model=NotebookOut)
@@ -97,12 +61,93 @@ def show(
     current_user: User = Depends(require_active_user),
     session: Session = Depends(get_db),
 ):
-    notebook = session.get(Notebook, notebook_id)
-    if notebook is None or notebook.user_id != current_user.id:
+    operation = Show(session=session, user=current_user, notebook_id=notebook_id)
+    operation.execute()
+    if not operation.found():
         return JSONResponse(status_code=404, content={"message": "not found"})
 
-    _ensure_embedding_configs(session, [notebook])
-    return notebook.to_dict(include_connector=True)
+    return operation.notebook.to_dict(include_connector=True)
+
+
+@router.post("/{notebook_id}/infer")
+def infer(
+    notebook_id: str,
+    payload: ConnectorInfer,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = Infer(session=session, user=current_user, notebook_id=notebook_id, payload=payload)
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+    if not operation.valid():
+        return JSONResponse(status_code=422, content=operation.errors)
+
+    return operation.response
+
+
+@router.get("/{notebook_id}/notebook_files", response_model=NotebookFileCollection)
+def index_notebook_files(
+    notebook_id: str,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = IndexFiles(session=session, user=current_user, notebook_id=notebook_id)
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    return operation.to_dict()
+
+
+@router.post("/{notebook_id}/notebook_files", response_model=NotebookFileOut, status_code=201)
+def create_notebook_file(
+    request: Request,
+    notebook_id: str,
+    name: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = CreateFile(
+        session=session,
+        user=current_user,
+        settings=request.app.state.settings,
+        notebook_id=notebook_id,
+        name=name,
+        file=file,
+    )
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+    if operation.invalid():
+        return JSONResponse(status_code=422, content=operation.payload)
+
+    return operation.notebook_file.to_dict()
+
+
+@router.delete("/{notebook_id}/notebook_files/{notebook_file_id}")
+def delete_notebook_file(
+    request: Request,
+    notebook_id: str,
+    notebook_file_id: str,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = DestroyFile(
+        session=session,
+        user=current_user,
+        settings=request.app.state.settings,
+        notebook_id=notebook_id,
+        notebook_file_id=notebook_file_id,
+    )
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+    if operation.invalid():
+        return JSONResponse(status_code=422, content=operation.payload)
+
+    return {"message": "ok"}
 
 
 @router.delete("/{notebook_id}")
@@ -111,56 +156,9 @@ def delete(
     current_user: User = Depends(require_active_user),
     session: Session = Depends(get_db),
 ):
-    notebook = session.get(Notebook, notebook_id)
-    if notebook is None or (current_user.role != "admin" and notebook.user_id != current_user.id):
+    operation = Destroy(session=session, user=current_user, notebook_id=notebook_id)
+    operation.execute()
+    if not operation.found():
         return JSONResponse(status_code=404, content={"message": "not found"})
 
-    embedding_config_id = notebook.embedding_config_id
-    session.execute(sql_delete(NotebookVector).where(NotebookVector.notebook_id == notebook.id))
-    session.delete(notebook)
-    session.flush()
-
-    if embedding_config_id is not None and _embedding_config_unused(session, embedding_config_id):
-        embedding_config = session.get(EmbeddingConfig, embedding_config_id)
-        if embedding_config is not None:
-            session.delete(embedding_config)
-
-    session.commit()
     return {"message": "ok"}
-
-
-def _ensure_embedding_configs(session, notebooks):
-    changed = False
-    for notebook in notebooks:
-        if notebook.embedding_config_id is not None:
-            continue
-
-        operation = ResolveEmbeddingConfig(session=session, connector=notebook.connector)
-        operation.execute()
-        if operation.invalid():
-            continue
-
-        notebook.embedding_config_id = operation.embedding_config.id
-        changed = True
-
-    if changed:
-        session.commit()
-        for notebook in notebooks:
-            session.refresh(notebook)
-
-
-def _embedding_config_unused(session, embedding_config_id):
-    notebook_count = (
-        session.scalar(select(func.count()).select_from(Notebook).where(Notebook.embedding_config_id == embedding_config_id))
-        or 0
-    )
-    if notebook_count > 0:
-        return False
-
-    vector_count = (
-        session.scalar(
-            select(func.count()).select_from(NotebookVector).where(NotebookVector.embedding_config_id == embedding_config_id)
-        )
-        or 0
-    )
-    return vector_count == 0

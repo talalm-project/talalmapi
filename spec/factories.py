@@ -4,6 +4,7 @@ from app.helpers.api_helpers import build_password_hash
 from app.models.connector import Connector
 from app.models.embedding_config import EmbeddingConfig
 from app.models.notebook import Notebook
+from app.models.notebook_file import NotebookFile
 from app.models.notebook_vector import NotebookVector
 from app.models.user import User
 
@@ -83,6 +84,23 @@ class NotebookFactory(factory.alchemy.SQLAlchemyModelFactory):
     status = "active"
 
 
+class NotebookFileFactory(factory.alchemy.SQLAlchemyModelFactory):
+    class Meta:
+        model = NotebookFile
+        sqlalchemy_session = None
+        sqlalchemy_session_persistence = "commit"
+
+    notebook = factory.SubFactory(NotebookFactory)
+    name = factory.Sequence(lambda n: f"Notebook File {n}")
+    filename = factory.Sequence(lambda n: f"notebook-file-{n}.pdf")
+    content_type = "application/pdf"
+    byte_size = 1024
+    checksum = factory.Sequence(lambda n: f"checksum-{n}")
+    status = "pending"
+    error_message = None
+    data = factory.Dict({})
+
+
 class NotebookVectorFactory(factory.alchemy.SQLAlchemyModelFactory):
     class Meta:
         model = NotebookVector
@@ -96,7 +114,7 @@ class NotebookVectorFactory(factory.alchemy.SQLAlchemyModelFactory):
             connector=vector.embedding_config.connector,
         )
     )
-    notebook_file_id = None
+    notebook_file = None
     chunk_index = factory.Sequence(lambda n: n)
     text = factory.Sequence(lambda n: f"Notebook vector chunk {n}")
     embedding = factory.LazyAttribute(lambda vector: [float(vector.chunk_index), 1.0, 0.0])

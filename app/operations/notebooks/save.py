@@ -1,7 +1,7 @@
 from copy import deepcopy
 
 from app.models.connector import Connector
-from app.models.notebook import Notebook
+from app.models.notebook import DEFAULT_NOTEBOOK_SYSTEM_PROMPT, Notebook
 from app.operations.embedding_configs import Resolve as ResolveEmbeddingConfig
 from app.operations.validator import Validator
 
@@ -12,12 +12,14 @@ class Save(Validator):
         session,
         user,
         title=None,
+        system_prompt=None,
         connector_id=None,
     ):
         super().__init__()
         self.session = session
         self.user = user
         self.title = title
+        self.system_prompt = system_prompt
         self.connector_id = connector_id
         self.connector = None
         self.notebook = None
@@ -37,6 +39,7 @@ class Save(Validator):
 
             self.notebook = Notebook(
                 title=self.title.strip(),
+                system_prompt=self._normalized_system_prompt(),
                 user_id=self.user.id,
                 connector_id=self.connector.id,
                 embedding_config_id=embedding_config.id,
@@ -69,3 +72,10 @@ class Save(Validator):
             return None
 
         return operation.embedding_config
+
+    def _normalized_system_prompt(self):
+        if self.system_prompt is None:
+            return DEFAULT_NOTEBOOK_SYSTEM_PROMPT
+
+        normalized_prompt = self.system_prompt.strip()
+        return normalized_prompt or DEFAULT_NOTEBOOK_SYSTEM_PROMPT

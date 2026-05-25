@@ -29,7 +29,12 @@ class NotebookVector(Base):
         nullable=False,
         index=True,
     )
-    notebook_file_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    notebook_file_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("notebook_files.id"),
+        nullable=True,
+        index=True,
+    )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(Vector(), nullable=False)
@@ -43,6 +48,7 @@ class NotebookVector(Base):
     )
 
     notebook = relationship("Notebook", back_populates="vectors")
+    notebook_file = relationship("NotebookFile", back_populates="vectors")
     embedding_config = relationship("EmbeddingConfig", back_populates="notebook_vectors")
 
     def to_dict(self):

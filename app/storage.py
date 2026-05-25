@@ -30,13 +30,26 @@ def store_file(upload: UploadFile, settings, filename=None):
     return _store_s3(upload, settings, filename)
 
 
-def _store_s3(upload, settings, filename=None):
+def store_file_at_key(upload: UploadFile, settings, key, filename=None):
+    return _store_s3(upload, settings, filename=filename, key=key)
+
+
+def delete_file(settings, key):
+    bucket = settings.STORAGE_S3_BUCKET
+    if not bucket:
+        raise ValueError("STORAGE_S3_BUCKET must be set")
+
+    client = _get_s3_client(settings)
+    client.delete_object(Bucket=bucket, Key=key)
+
+
+def _store_s3(upload, settings, filename=None, key=None):
     bucket = settings.STORAGE_S3_BUCKET
     if not bucket:
         raise ValueError("STORAGE_S3_BUCKET must be set")
 
     safe_name = _build_filename(upload.filename, filename)
-    key = _build_key(safe_name, settings.STORAGE_S3_PREFIX)
+    key = _build_prefixed_key(key, settings.STORAGE_S3_PREFIX) if key else _build_key(safe_name, settings.STORAGE_S3_PREFIX)
     client = _get_s3_client(settings)
 
     extra_args = {}
@@ -63,6 +76,12 @@ def _build_key(filename, prefix=""):
     prefix = (prefix or "").strip("/")
     unique = uuid.uuid4().hex
     key = f"{unique}-{filename}"
+    return f"{prefix}/{key}" if prefix else key
+
+
+def _build_prefixed_key(key, prefix=""):
+    key = str(key).strip("/")
+    prefix = (prefix or "").strip("/")
     return f"{prefix}/{key}" if prefix else key
 
 
