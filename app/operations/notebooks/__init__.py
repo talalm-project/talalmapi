@@ -2,6 +2,7 @@ from app.operations.notebooks.create_file import CreateFile
 from app.operations.notebooks.build_rag_payload import BuildRagPayload
 from app.operations.notebooks.destroy import Destroy
 from app.operations.notebooks.destroy_file import DestroyFile
+from app.operations.notebooks.download_file import DownloadFile
 from app.operations.notebooks.embed_notebook_file import EmbedNotebookFile
 from app.operations.notebooks.generate_query_embedding import GenerateQueryEmbedding
 from app.operations.notebooks.index import Index
@@ -17,6 +18,7 @@ __all__ = [
     "CreateFile",
     "Destroy",
     "DestroyFile",
+    "DownloadFile",
     "EmbedNotebookFile",
     "GenerateQueryEmbedding",
     "Index",

@@ -1,11 +1,13 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies.auth import require_active_user
 from app.models.user import User
-from app.operations.notebooks import CreateFile, Destroy, DestroyFile, Index, IndexFiles, Infer, Save, Show
+from app.operations.notebooks import CreateFile, Destroy, DestroyFile, DownloadFile, Index, IndexFiles, Infer, Save, Show
 from app.schemas.connector import ConnectorInfer
 from app.schemas.notebook_file import NotebookFileCollection, NotebookFileOut
 from app.schemas.notebook import NotebookCollection, NotebookCreate, NotebookOut
@@ -124,6 +126,41 @@ def create_notebook_file(
         return JSONResponse(status_code=422, content=operation.payload)
 
     return operation.notebook_file.to_dict()
+
+
+@router.get("/{notebook_id}/notebook_files/{notebook_file_id}/download")
+def download_notebook_file(
+    request: Request,
+    notebook_id: str,
+    notebook_file_id: str,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = DownloadFile(
+        session=session,
+        user=current_user,
+        settings=request.app.state.settings,
+        notebook_id=notebook_id,
+        notebook_file_id=notebook_file_id,
+    )
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    filename = operation.notebook_file.filename
+    content_type = operation.notebook_file.content_type or "application/octet-stream"
+    safe_filename = filename.replace('"', "")
+    headers = {
+        "Content-Disposition": f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{quote(filename)}',
+    }
+    if operation.notebook_file.byte_size is not None:
+        headers["Content-Length"] = str(operation.notebook_file.byte_size)
+
+    return StreamingResponse(
+        operation.file_response["Body"].iter_chunks(),
+        media_type=content_type,
+        headers=headers,
+    )
 
 
 @router.delete("/{notebook_id}/notebook_files/{notebook_file_id}")

@@ -716,6 +716,110 @@ def test_admin_can_list_notebook_files_for_other_users_notebook(client, app, db_
     assert response.json()["records"] == [notebook_file.to_dict()]
 
 
+def test_download_notebook_file_streams_rustfs_object(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    notebook_file = NotebookFileFactory(
+        notebook=notebook,
+        filename="research notes.pdf",
+        content_type="application/pdf",
+        byte_size=13,
+        object_key="notebooks/download-key",
+    )
+    captured = {}
+
+    class FakeBody:
+        def iter_chunks(self):
+            yield b"hello "
+            yield b"rustfs!"
+
+    def fake_get_file(settings, key):
+        captured["bucket"] = settings.STORAGE_S3_BUCKET
+        captured["key"] = key
+        return {"Body": FakeBody()}
+
+    monkeypatch.setattr("app.operations.notebooks.download_file.get_file", fake_get_file)
+
+    response = client.get(
+        f"/notebooks/{notebook.id}/notebook_files/{notebook_file.id}/download",
+        headers=_headers(app, user),
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"hello rustfs!"
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-length"] == "13"
+    assert 'filename="research notes.pdf"' in response.headers["content-disposition"]
+    assert "filename*=UTF-8''research%20notes.pdf" in response.headers["content-disposition"]
+    assert captured == {"bucket": "talalm-test", "key": "notebooks/download-key"}
+
+
+def test_download_notebook_file_hides_other_users_notebook(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory()
+    notebook_file = NotebookFileFactory(notebook=notebook)
+    downloaded = {"called": False}
+
+    monkeypatch.setattr(
+        "app.operations.notebooks.download_file.get_file",
+        lambda settings, key: downloaded.update({"called": True}),
+    )
+
+    response = client.get(
+        f"/notebooks/{notebook.id}/notebook_files/{notebook_file.id}/download",
+        headers=_headers(app, user),
+    )
+
+    assert response.status_code == 404
+    assert downloaded == {"called": False}
+
+
+def test_download_notebook_file_rejects_file_from_different_notebook(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    other_notebook = NotebookFactory(user=user)
+    notebook_file = NotebookFileFactory(notebook=other_notebook)
+    downloaded = {"called": False}
+
+    monkeypatch.setattr(
+        "app.operations.notebooks.download_file.get_file",
+        lambda settings, key: downloaded.update({"called": True}),
+    )
+
+    response = client.get(
+        f"/notebooks/{notebook.id}/notebook_files/{notebook_file.id}/download",
+        headers=_headers(app, user),
+    )
+
+    assert response.status_code == 404
+    assert downloaded == {"called": False}
+
+
+def test_admin_can_download_notebook_file_for_other_users_notebook(client, app, db_session, monkeypatch):
+    admin = UserFactory(role="admin")
+    notebook = NotebookFactory()
+    notebook_file = NotebookFileFactory(notebook=notebook, object_key="admin-download-key")
+    captured = {}
+
+    class FakeBody:
+        def iter_chunks(self):
+            yield b"admin file"
+
+    monkeypatch.setattr(
+        "app.operations.notebooks.download_file.get_file",
+        lambda settings, key: captured.update({"bucket": settings.STORAGE_S3_BUCKET, "key": key}) or {"Body": FakeBody()},
+    )
+
+    response = client.get(
+        f"/notebooks/{notebook.id}/notebook_files/{notebook_file.id}/download",
+        headers=_headers(app, admin),
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"admin file"
+    assert captured == {"bucket": "talalm-test", "key": "admin-download-key"}
+
+
 def test_create_notebook_file_requires_name(client, app, db_session):
     user = UserFactory(role="user")
     notebook = NotebookFactory(user=user)
