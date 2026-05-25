@@ -1,7 +1,8 @@
 from app.helpers.api_helpers import build_jwt_header, generate_jwt
 from app.models.embedding_config import EmbeddingConfig
 from app.models.notebook import Notebook
-from spec.factories import ConnectorFactory, NotebookFactory, UserFactory
+from app.models.notebook_vector import NotebookVector
+from spec.factories import ConnectorFactory, NotebookFactory, NotebookVectorFactory, UserFactory
 
 
 def _headers(app, user):
@@ -280,3 +281,64 @@ def test_show_notebook_hides_other_users_notebook(client, app, db_session):
     response = client.get(f"/notebooks/{notebook.id}", headers=_headers(app, user))
 
     assert response.status_code == 404
+
+
+def test_delete_notebook_allows_owner_and_clears_vectors_and_unused_embedding_config(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+    notebook_id = notebook.id
+    embedding_config_id = notebook.embedding_config_id
+    vector = NotebookVectorFactory(notebook=notebook, embedding_config=notebook.embedding_config)
+    vector_id = vector.id
+
+    response = client.delete(f"/notebooks/{notebook_id}", headers=_headers(app, user))
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "ok"}
+    db_session.expire_all()
+    assert db_session.get(Notebook, notebook_id) is None
+    assert db_session.get(NotebookVector, vector_id) is None
+    assert db_session.get(EmbeddingConfig, embedding_config_id) is None
+
+
+def test_delete_notebook_hides_other_users_notebook(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory()
+
+    response = client.delete(f"/notebooks/{notebook.id}", headers=_headers(app, user))
+
+    assert response.status_code == 404
+    assert db_session.get(Notebook, notebook.id) is not None
+
+
+def test_admin_can_delete_other_users_notebook(client, app, db_session):
+    admin = UserFactory(role="admin")
+    notebook = NotebookFactory()
+    notebook_id = notebook.id
+    embedding_config_id = notebook.embedding_config_id
+
+    response = client.delete(f"/notebooks/{notebook_id}", headers=_headers(app, admin))
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(Notebook, notebook_id) is None
+    assert db_session.get(EmbeddingConfig, embedding_config_id) is None
+
+
+def test_delete_notebook_keeps_shared_embedding_config(client, app, db_session):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user)
+    first = NotebookFactory(user=user, connector=connector)
+    second = NotebookFactory(user=user, connector=connector, embedding_config=first.embedding_config)
+    NotebookVectorFactory(notebook=first, embedding_config=first.embedding_config)
+    first_id = first.id
+    second_id = second.id
+    shared_embedding_config_id = first.embedding_config_id
+
+    response = client.delete(f"/notebooks/{first_id}", headers=_headers(app, user))
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(Notebook, first_id) is None
+    assert db_session.get(Notebook, second_id) is not None
+    assert db_session.get(EmbeddingConfig, shared_embedding_config_id) is not None

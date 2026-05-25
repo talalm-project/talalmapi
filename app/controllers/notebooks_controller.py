@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy import delete as sql_delete
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies.auth import require_active_user
+from app.models.embedding_config import EmbeddingConfig
 from app.models.notebook import Notebook
+from app.models.notebook_vector import NotebookVector
 from app.models.user import User
 from app.operations.notebooks import Save
 from app.schemas.notebook import NotebookCollection, NotebookCreate, NotebookOut
@@ -97,3 +100,44 @@ def show(
         return JSONResponse(status_code=404, content={"message": "not found"})
 
     return notebook.to_dict(include_connector=True)
+
+
+@router.delete("/{notebook_id}")
+def delete(
+    notebook_id: str,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    notebook = session.get(Notebook, notebook_id)
+    if notebook is None or (current_user.role != "admin" and notebook.user_id != current_user.id):
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    embedding_config_id = notebook.embedding_config_id
+    session.execute(sql_delete(NotebookVector).where(NotebookVector.notebook_id == notebook.id))
+    session.delete(notebook)
+    session.flush()
+
+    if _embedding_config_unused(session, embedding_config_id):
+        embedding_config = session.get(EmbeddingConfig, embedding_config_id)
+        if embedding_config is not None:
+            session.delete(embedding_config)
+
+    session.commit()
+    return {"message": "ok"}
+
+
+def _embedding_config_unused(session, embedding_config_id):
+    notebook_count = (
+        session.scalar(select(func.count()).select_from(Notebook).where(Notebook.embedding_config_id == embedding_config_id))
+        or 0
+    )
+    if notebook_count > 0:
+        return False
+
+    vector_count = (
+        session.scalar(
+            select(func.count()).select_from(NotebookVector).where(NotebookVector.embedding_config_id == embedding_config_id)
+        )
+        or 0
+    )
+    return vector_count == 0
