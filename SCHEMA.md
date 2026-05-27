@@ -7,7 +7,7 @@ It is based on the SQLAlchemy models in `app/models`.
 
 - ORM: SQLAlchemy declarative models using `app.db.Base`
 - Migrations: Alembic revisions in `alembic/versions`
-- Current model tables: `users`, `connectors`, `notebooks`, `notebook_files`, `embedding_configs`, `notebook_vectors`
+- Current model tables: `users`, `connectors`, `notebooks`, `notebook_files`, `notebook_notes`, `embedding_configs`, `notebook_vectors`
 
 ## Tables
 
@@ -125,6 +125,8 @@ The Alembic history currently creates this schema through these revisions:
 | `0013_notebook_system_prompt` | Adds notebook-level system prompts. |
 | `0014_default_nb_prompt` | Backfills and defaults notebook system prompts. |
 | `0015_notebook_followup_prompt` | Updates the default notebook prompt so conversation context can resolve follow-up references while notebook context remains the factual source. |
+| `0016_notebook_notes` | Creates notebook note records for saved model responses associated with notebooks. |
+| `0017_note_context_nullable` | Allows notebook note context state to be stored as `true` or `NULL`. |
 
 ## Current Schema Boundaries
 

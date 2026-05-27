@@ -16,6 +16,7 @@ def test_notebook_factory_creates_notebook(db_session):
     assert notebook.embedding_config_id == notebook.embedding_config.id
     assert notebook.system_prompt == DEFAULT_NOTEBOOK_SYSTEM_PROMPT
     assert "resolve follow-up references like 'this'" in notebook.system_prompt
+    assert "notebook notes context marked for use as context" in notebook.system_prompt
     assert notebook.status == "active"
     assert notebook.created_at is not None
     assert notebook.updated_at is not None

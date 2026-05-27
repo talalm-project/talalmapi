@@ -1,13 +1,17 @@
+import os
 from pathlib import Path
 from struct import unpack_from
 
 
-DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS = 16384
+DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS = 4096
 DEFAULT_LLAMA_CPP_CONTEXT_WINDOW_TOKENS = 512
 DEFAULT_LOCAL_EMBEDDING_CONTEXT_WINDOW_TOKENS = 65536
 DEFAULT_LOCAL_EMBEDDING_BATCH_TOKENS = 512
 DEFAULT_LOCAL_EMBEDDING_SEQUENCES = 256
 DEFAULT_LOCAL_OUTPUT_TOKENS = 1024
+DEFAULT_LOCAL_BATCH_TOKENS = 1024
+DEFAULT_LOCAL_NO_PERF = True
+DEFAULT_LOCAL_VERBOSE = False
 DEFAULT_EMBEDDING_CHARS_PER_TOKEN = 4
 DEFAULT_EMBEDDING_CHUNK_RATIO = 0.75
 DEFAULT_EMBEDDING_CHUNK_OVERLAP_RATIO = 0.1
@@ -69,11 +73,15 @@ def build_connector_metadata(connector_attrs, data=None):
 
 
 def inference_model_options(connector):
+    connector_data = _data(connector)
     metadata_options = _section_value(connector, "inference", "model_options")
     if isinstance(metadata_options, dict):
+        top_level_options = connector_data.get("model_options", {})
+        top_level_options = top_level_options if isinstance(top_level_options, dict) else {}
+        metadata_options = _with_runtime_context_override(metadata_options, top_level_options)
         return _with_local_inference_context(connector, metadata_options)
 
-    options = _data(connector).get("model_options", {})
+    options = connector_data.get("model_options", {})
     options = options if isinstance(options, dict) else {}
     return _with_local_inference_context(connector, options)
 
@@ -278,11 +286,92 @@ def _with_local_inference_context(connector, options):
     normalized_options = dict(options)
     if _get_value(connector, "connection_type") != "local":
         return normalized_options
+    normalized_options = _with_local_runtime_defaults(normalized_options)
     if _positive_int(normalized_options.get("n_ctx")):
         return normalized_options
 
     normalized_options["n_ctx"] = _local_inference_context_window(_get_value(connector, "local_file_path"), normalized_options)
     return normalized_options
+
+
+def _with_local_runtime_defaults(options):
+    normalized_options = dict(options)
+    cpu_count = os.cpu_count() or 1
+    n_threads = _env_positive_int("LLAMA_CPP_N_THREADS") or _physical_cpu_count(cpu_count)
+    n_threads_batch = _env_positive_int("LLAMA_CPP_N_THREADS_BATCH") or cpu_count
+    n_batch = _env_positive_int("LLAMA_CPP_N_BATCH") or DEFAULT_LOCAL_BATCH_TOKENS
+
+    normalized_options.setdefault("n_threads", n_threads)
+    normalized_options.setdefault("n_threads_batch", n_threads_batch)
+    normalized_options.setdefault("n_batch", n_batch)
+    normalized_options.setdefault("no_perf", _env_bool("LLAMA_CPP_NO_PERF", DEFAULT_LOCAL_NO_PERF))
+    normalized_options.setdefault("verbose", _env_bool("LLAMA_CPP_VERBOSE", DEFAULT_LOCAL_VERBOSE))
+    return normalized_options
+
+
+def _with_runtime_context_override(metadata_options, top_level_options):
+    env_n_ctx = _env_positive_int("LLAMA_CPP_N_CTX")
+    if env_n_ctx:
+        return {**metadata_options, "n_ctx": env_n_ctx}
+
+    if _positive_int(top_level_options.get("n_ctx")) or _positive_int(top_level_options.get("context_window_tokens")):
+        return metadata_options
+
+    metadata_n_ctx = _positive_int(metadata_options.get("n_ctx"))
+    if metadata_n_ctx and metadata_n_ctx > DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS:
+        return {**metadata_options, "n_ctx": DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS}
+
+    return metadata_options
+
+
+def _physical_cpu_count(fallback):
+    cpuinfo = Path("/proc/cpuinfo")
+    if not cpuinfo.exists():
+        return fallback
+
+    cores = set()
+    physical_id = None
+    core_id = None
+    try:
+        for line in cpuinfo.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if not line.strip():
+                if physical_id is not None and core_id is not None:
+                    cores.add((physical_id, core_id))
+                physical_id = None
+                core_id = None
+                continue
+
+            key, _, value = line.partition(":")
+            key = key.strip()
+            value = value.strip()
+            if key == "physical id":
+                physical_id = value
+            elif key == "core id":
+                core_id = value
+    except OSError:
+        return fallback
+
+    if physical_id is not None and core_id is not None:
+        cores.add((physical_id, core_id))
+
+    return len(cores) or fallback
+
+
+def _env_positive_int(name):
+    try:
+        value = int(os.getenv(name, ""))
+    except ValueError:
+        return None
+
+    return value if value > 0 else None
+
+
+def _env_bool(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _get_value(source, key):

@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from app.models.embedding_config import EmbeddingConfig
 from app.models.notebook import Notebook
 from app.models.notebook_file import NotebookFile
+from app.models.notebook_note import NotebookNote
 from app.models.notebook_vector import NotebookVector
 from app.operations.notebooks.access import visible_notebook
 
@@ -23,6 +24,7 @@ class Destroy:
         embedding_config_id = self.notebook.embedding_config_id
         self.session.execute(sql_delete(NotebookVector).where(NotebookVector.notebook_id == self.notebook.id))
         self.session.execute(sql_delete(NotebookFile).where(NotebookFile.notebook_id == self.notebook.id))
+        self.session.execute(sql_delete(NotebookNote).where(NotebookNote.notebook_id == self.notebook.id))
         self.session.delete(self.notebook)
         self.session.flush()
 

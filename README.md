@@ -291,6 +291,23 @@ Local inference only accepts model paths ending in `.gguf`, case-insensitive.
 Local connectors use `create_chat_completion`, so instruction/chat GGUF models
 receive chat messages rather than raw completion prompts.
 
+Local GGUF models are kept warm in an in-process cache keyed by model path and
+model options. Calls against the same cached model are serialized because
+`llama-cpp-python` model instances are not safe to use concurrently. Unless a
+connector explicitly sets these llama.cpp options, local inference defaults to:
+
+| Option | Default | Override |
+| --- | --- | --- |
+| `n_threads` | half of available CPU threads | `LLAMA_CPP_N_THREADS` |
+| `n_threads_batch` | all available CPU threads | `LLAMA_CPP_N_THREADS_BATCH` |
+| `n_ctx` | `4096` unless explicitly configured | `LLAMA_CPP_N_CTX` |
+| `n_batch` | `1024` | `LLAMA_CPP_N_BATCH` |
+| `no_perf` | `true` | `LLAMA_CPP_NO_PERF` |
+| `verbose` | `false` | `LLAMA_CPP_VERBOSE` |
+
+Use a larger explicit connector `model_options.n_ctx`, or set
+`LLAMA_CPP_N_CTX`, only when the request needs a larger prompt window.
+
 Response body:
 
 | Field | Type | Notes |

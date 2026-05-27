@@ -9,7 +9,15 @@ from app.db import Base, db
 load_environment()
 
 from config import Config  # noqa: E402
-from app.models import connector, notebook, user  # noqa: F401,E402
+from app.models import (  # noqa: F401,E402
+    connector,
+    embedding_config,
+    notebook,
+    notebook_file,
+    notebook_note,
+    notebook_vector,
+    user,
+)
 
 
 config = context.config

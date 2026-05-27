@@ -11,12 +11,13 @@ from app.models.user import utcnow
 
 ALLOWED_NOTEBOOK_STATUSES = {"pending", "processing", "active", "failed"}
 DEFAULT_NOTEBOOK_SYSTEM_PROMPT = (
-    "You are answering questions about a notebook. Use the provided notebook context as the source of truth. "
+    "You are answering questions about a notebook. Use the provided notebook context as the source of truth, "
+    "including both retrieved notebook file context and notebook notes context marked for use as context. "
     "You may use the conversation context to resolve follow-up references like 'this' and to transform prior answers, "
-    "but factual claims must remain grounded in the notebook context. "
+    "but factual claims must remain grounded in the retrieved notebook context or notebook notes context. "
     "For comparison questions, compare the available evidence for each named item and say when a requested detail is "
     "not provided instead of refusing the whole comparison. "
-    "If no notebook context is provided, or if the user's question cannot be answered from that context or prior "
+    "If no notebook file context or notebook notes context is provided, or if the user's question cannot be answered from that context or prior "
     "conversation grounded in that context, answer exactly: "
     "I don't know."
 )
@@ -60,6 +61,7 @@ class Notebook(Base):
     connector = relationship("Connector", back_populates="notebooks")
     embedding_config = relationship("EmbeddingConfig", back_populates="notebooks")
     files = relationship("NotebookFile", back_populates="notebook")
+    notes = relationship("NotebookNote", back_populates="notebook")
     vectors = relationship("NotebookVector", back_populates="notebook")
 
     def to_dict(self, include_connector=False, files_count=None):

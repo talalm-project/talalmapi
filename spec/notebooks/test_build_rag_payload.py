@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from app.operations.notebooks.build_rag_payload import BuildRagPayload
 from app.schemas.connector import ConnectorInfer
 from spec.factories import ConnectorFactory
@@ -79,3 +81,28 @@ def test_build_rag_payload_contextualizes_recent_chat_for_local_rag(db_session):
     assert "Assistant: Previous answer" in operation.rag_payload.prompt
     assert "Notebook context:\n\n[1] Current context" in operation.rag_payload.prompt
     assert "User question:\n\nCurrent question" in operation.rag_payload.prompt
+
+
+def test_build_rag_payload_includes_context_notes(db_session):
+    connector = ConnectorFactory(connection_type="local", data={"model_options": {"n_ctx": 1024}})
+    payload = ConnectorInfer(prompt="Use saved notes", options={})
+    context_notes = [
+        SimpleNamespace(name="Saved Answer", data={"content": "Prior model response about the policy."}),
+        SimpleNamespace(
+            name="Structured Note",
+            data={"blocks": [{"type": "heading", "text": "Finding"}, {"type": "paragraph", "text": "Important detail."}]},
+        ),
+    ]
+
+    operation = BuildRagPayload(
+        payload,
+        [{"text": "Retrieved file context."}],
+        connector=connector,
+        context_notes=context_notes,
+    )
+    operation.execute()
+
+    assert "Notebook notes context:" in operation.rag_payload.prompt
+    assert "[Note 1: Saved Answer] Prior model response about the policy." in operation.rag_payload.prompt
+    assert "[Note 2: Structured Note] Finding Important detail." in operation.rag_payload.prompt
+    assert "Notebook context:\n\n[1] Retrieved file context." in operation.rag_payload.prompt

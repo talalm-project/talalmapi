@@ -5,6 +5,7 @@ from app.models.connector import Connector
 from app.models.embedding_config import EmbeddingConfig
 from app.models.notebook import Notebook
 from app.models.notebook_file import NotebookFile
+from app.models.notebook_note import NotebookNote
 from app.models.notebook_vector import NotebookVector
 from app.models.user import User
 
@@ -99,6 +100,18 @@ class NotebookFileFactory(factory.alchemy.SQLAlchemyModelFactory):
     status = "pending"
     error_message = None
     data = factory.Dict({})
+
+
+class NotebookNoteFactory(factory.alchemy.SQLAlchemyModelFactory):
+    class Meta:
+        model = NotebookNote
+        sqlalchemy_session = None
+        sqlalchemy_session_persistence = "commit"
+
+    notebook = factory.SubFactory(NotebookFactory)
+    name = factory.Sequence(lambda n: f"Notebook Note {n}")
+    data = factory.Dict({})
+    is_context = None
 
 
 class NotebookVectorFactory(factory.alchemy.SQLAlchemyModelFactory):

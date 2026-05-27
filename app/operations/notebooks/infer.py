@@ -1,5 +1,6 @@
 from app.models.notebook import DEFAULT_NOTEBOOK_SYSTEM_PROMPT
 from app.models.notebook_file import NotebookFile
+from app.models.notebook_note import NotebookNote
 from app.operations.connectors.infer import Infer as ConnectorInfer
 from app.operations.notebooks.access import visible_notebook
 from app.operations.notebooks.build_rag_payload import BuildRagPayload
@@ -41,6 +42,7 @@ class Infer:
             retrieve_operation.chunks,
             connector=self.notebook.connector,
             system_prompt=system_prompt,
+            context_notes=self._context_notes(),
         )
         payload_operation.execute()
 
@@ -79,6 +81,14 @@ class Infer:
             for notebook_file_id in notebook_file_ids
             if notebook_file_id in notebook_files_by_id
         ]
+
+    def _context_notes(self):
+        return (
+            self.session.query(NotebookNote)
+            .filter(NotebookNote.notebook_id == self.notebook.id, NotebookNote.is_context.is_(True))
+            .order_by(NotebookNote.created_at.desc())
+            .all()
+        )
 
 
 def _query_from_payload(payload, current_question=None):

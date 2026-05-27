@@ -1,7 +1,10 @@
+import json
+
 from app.schemas.connector import ConnectorInfer
 from app.operations.connectors.metadata import inference_context_window_tokens, inference_default_output_tokens
 
 MAX_CONVERSATION_CONTEXT_CHARS = 1200
+MAX_NOTE_CONTEXT_CHARS = 4000
 CONVERSATION_CONTEXT_POLICY = (
     "Use this conversation context to resolve follow-up references like 'this' and to transform prior answers. "
     "Keep factual claims grounded in the notebook context."
@@ -9,11 +12,12 @@ CONVERSATION_CONTEXT_POLICY = (
 
 
 class BuildRagPayload:
-    def __init__(self, payload, chunks, connector=None, system_prompt=None):
+    def __init__(self, payload, chunks, connector=None, system_prompt=None, context_notes=None):
         self.payload = payload
         self.chunks = chunks or []
         self.connector = connector
         self.system_prompt = system_prompt or ""
+        self.context_notes = context_notes or []
         self.rag_payload = None
 
     def execute(self):
@@ -86,8 +90,39 @@ class BuildRagPayload:
             sections.extend(["Conversation context policy:", CONVERSATION_CONTEXT_POLICY])
             sections.extend(["Conversation context:", conversation_context])
 
+        formatted_notes = self._formatted_context_notes()
+        if formatted_notes:
+            sections.extend(["Notebook notes context:", formatted_notes])
+
         sections.extend(["Notebook context:", self._formatted_chunks(), "User question:", query])
         return "\n\n".join(sections)
+
+    def _formatted_context_notes(self):
+        if not self.context_notes:
+            return ""
+
+        formatted = []
+        used_chars = 0
+        for index, note in enumerate(self.context_notes, start=1):
+            text = _note_text(note)
+            if not text:
+                continue
+
+            name = getattr(note, "name", None) or f"Note {index}"
+            prefix = f"[Note {index}: {name}] "
+            separator = "\n\n" if formatted else ""
+            remaining = MAX_NOTE_CONTEXT_CHARS - used_chars - len(separator) - len(prefix)
+            if remaining <= 0:
+                break
+
+            if len(text) > remaining:
+                text = text[: max(remaining - 14, 0)].rstrip() + " [truncated]"
+
+            entry = f"{prefix}{text}"
+            formatted.append(entry)
+            used_chars += len(separator) + len(entry)
+
+        return "\n\n".join(formatted)
 
     def _formatted_chunks(self):
         if not self.chunks:
@@ -130,6 +165,8 @@ class BuildRagPayload:
                 "Conversation context:",
                 CONVERSATION_CONTEXT_POLICY,
                 self._conversation_context(),
+                "Notebook notes context:",
+                self._formatted_context_notes(),
                 "User question:",
                 self._query_text(),
                 self.system_prompt,
@@ -229,3 +266,30 @@ def _compact_text(value, max_chars=None):
         return compacted[: max(max_chars - 14, 0)].rstrip() + " [truncated]"
 
     return compacted
+
+
+def _note_text(note):
+    data = getattr(note, "data", None) or {}
+    if isinstance(data.get("content"), str):
+        return _compact_text(data["content"])
+
+    blocks = data.get("blocks")
+    if isinstance(blocks, list):
+        texts = []
+        for block in blocks:
+            if isinstance(block, dict) and isinstance(block.get("text"), str):
+                texts.append(block["text"])
+        if texts:
+            return _compact_text("\n".join(texts))
+
+    response = data.get("response")
+    if isinstance(response, str):
+        return _compact_text(response)
+
+    if response is not None:
+        return _compact_text(json.dumps(response, sort_keys=True))
+
+    if data:
+        return _compact_text(json.dumps(data, sort_keys=True))
+
+    return ""

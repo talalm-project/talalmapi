@@ -7,10 +7,26 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies.auth import require_active_user
 from app.models.user import User
-from app.operations.notebooks import CreateFile, Destroy, DestroyFile, DownloadFile, Index, IndexFiles, Infer, Reindex, Save, Show
+from app.operations.notebooks import (
+    CreateFile,
+    CreateNote,
+    Destroy,
+    DestroyFile,
+    DestroyNote,
+    DownloadFile,
+    Index,
+    IndexFiles,
+    IndexNotes,
+    Infer,
+    Reindex,
+    Save,
+    Show,
+    ToggleNoteContext,
+)
 from app.schemas.connector import ConnectorInfer
 from app.schemas.notebook_file import NotebookFileCollection, NotebookFileOut
 from app.schemas.notebook import NotebookCollection, NotebookCreate, NotebookOut, NotebookUpdate
+from app.schemas.notebook_note import NotebookNoteCollection, NotebookNoteCreate, NotebookNoteOut
 
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
@@ -165,6 +181,83 @@ def create_notebook_file(
         return JSONResponse(status_code=422, content=operation.payload)
 
     return operation.notebook_file.to_dict()
+
+
+@router.get("/{notebook_id}/notebook_notes", response_model=NotebookNoteCollection)
+def index_notebook_notes(
+    notebook_id: str,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = IndexNotes(session=session, user=current_user, notebook_id=notebook_id)
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    return operation.to_dict()
+
+
+@router.post("/{notebook_id}/notebook_notes", response_model=NotebookNoteOut, status_code=201)
+def create_notebook_note(
+    notebook_id: str,
+    payload: NotebookNoteCreate,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = CreateNote(
+        session=session,
+        user=current_user,
+        notebook_id=notebook_id,
+        name=payload.name,
+        data=payload.data,
+    )
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+    if operation.invalid():
+        return JSONResponse(status_code=422, content=operation.payload)
+
+    return operation.notebook_note.to_dict()
+
+
+@router.post("/{notebook_id}/notebook_notes/{notebook_note_id}/toggle_context", response_model=NotebookNoteOut)
+def toggle_notebook_note_context(
+    notebook_id: str,
+    notebook_note_id: str,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = ToggleNoteContext(
+        session=session,
+        user=current_user,
+        notebook_id=notebook_id,
+        notebook_note_id=notebook_note_id,
+    )
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    return operation.notebook_note.to_dict()
+
+
+@router.delete("/{notebook_id}/notebook_notes/{notebook_note_id}")
+def delete_notebook_note(
+    notebook_id: str,
+    notebook_note_id: str,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = DestroyNote(
+        session=session,
+        user=current_user,
+        notebook_id=notebook_id,
+        notebook_note_id=notebook_note_id,
+    )
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+
+    return {"message": "ok"}
 
 
 @router.get("/{notebook_id}/notebook_files/{notebook_file_id}/download")

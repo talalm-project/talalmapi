@@ -6,6 +6,7 @@ from app.operations.connectors.metadata import (
     inference_model_name,
     inference_model_options,
 )
+from app.services.llama_model_cache import llama_model_cache
 
 
 DEFAULT_LOCAL_MAX_TOKENS = 1024
@@ -67,11 +68,12 @@ class Infer:
     def _infer_local(self):
         model_options = inference_model_options(self.connector)
         llama_class = _llama_class()
-        llm = llama_class(model_path=inference_local_file_path(self.connector), **model_options)
+        cached_model = llama_model_cache.get(llama_class, inference_local_file_path(self.connector), model_options)
         options = {"max_tokens": inference_default_output_tokens(self.connector, DEFAULT_LOCAL_MAX_TOKENS), **self.payload.options}
         started_at = perf_counter()
         try:
-            response = llm.create_chat_completion(messages=self._local_messages(), **options)
+            with cached_model.lock:
+                response = cached_model.llm.create_chat_completion(messages=self._local_messages(), **options)
         except ValueError as error:
             self.errors = {"inference": [str(error)]}
             return None
