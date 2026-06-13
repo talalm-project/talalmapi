@@ -22,6 +22,13 @@ python -m app.cli system:seed
 python -m app.cli server
 ```
 
+In a separate terminal, run the notebook embedding worker when working with
+uploaded notebook files:
+
+```bash
+python -m app.cli system:start_notebook_worker
+```
+
 Run specs with:
 
 ```bash
@@ -135,6 +142,47 @@ Useful development endpoints:
 - `/connectors` CRUD endpoints manage local model connectors
 - `POST /connectors/{id}/infer` runs inference through a connector
 - `POST /uploads`
+
+## 7. Start the notebook embedding worker
+
+Notebook file uploads are embedded asynchronously. Keep the API server running,
+then start the worker in a separate terminal:
+
+```bash
+python -m app.cli system:start_notebook_worker
+```
+
+The worker polls `notebook_files` for `pending` records every five seconds. For
+each pending file it:
+
+- downloads the file from the configured RustFS/S3 bucket
+- extracts text and chunks it safely for the configured local embedding model
+- writes vectors into PostgreSQL/pgvector
+- marks the file `active` when embedding succeeds, or `failed` when embedding
+  cannot complete
+
+Before starting the worker, make sure these are available:
+
+- PostgreSQL with pgvector is running and migrated
+- RustFS is running and the configured bucket exists
+- `LOCAL_MODELS_MANIFEST_PATH` points to a manifest with an embedding model
+- the connector used by the notebook has `embedding_local_file_path` and
+  `embedding_name` configured
+
+For local development, the usual terminal layout is:
+
+```bash
+# terminal 1, from the root repo
+docker compose up
+
+# terminal 2, from talalmapi/
+python -m app.cli server
+
+# terminal 3, from talalmapi/
+python -m app.cli system:start_notebook_worker
+```
+
+Stop the worker with `Ctrl-C`.
 
 ## Local GGUF Model Manifest
 
