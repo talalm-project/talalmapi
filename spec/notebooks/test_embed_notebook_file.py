@@ -128,3 +128,91 @@ def test_embed_notebook_file_marks_file_failed_when_generator_errors(db_session,
     assert failed_file.status == "failed"
     assert failed_file.error_message == "Unable to embed notebook file."
     assert db_session.query(NotebookVector).filter_by(notebook_file_id=notebook_file.id).count() == 0
+
+
+def test_embed_notebook_file_sanitizes_vector_text_before_insert(db_session, app, monkeypatch):
+    notebook_file = NotebookFileFactory(filename="notes.txt", object_key="nul-key", status="pending")
+
+    monkeypatch.setattr(
+        "app.operations.notebooks.embed_notebook_file.download_file_to_path",
+        lambda settings, key, destination_path: destination_path.write_text("hello", encoding="utf-8"),
+    )
+
+    class FakeGenerateLocalEmbeddings:
+        errors = {}
+        embeddings = [
+            {"text": "hello\x00 notebook", "embedding": [0.1, 0.2, 0.3], "metadata": {}},
+        ]
+
+        def __init__(self, **kwargs):
+            pass
+
+        def execute(self):
+            pass
+
+        def invalid(self):
+            return False
+
+    monkeypatch.setattr(
+        "app.operations.notebooks.embed_notebook_file.GenerateLocalEmbeddings",
+        lambda **kwargs: FakeGenerateLocalEmbeddings(**kwargs),
+    )
+
+    operation = EmbedNotebookFile(db_session, app.state.settings, notebook_file)
+    operation.execute()
+
+    assert operation.valid()
+    db_session.expire_all()
+    vector = db_session.query(NotebookVector).filter_by(notebook_file_id=notebook_file.id).one()
+    assert vector.text == "hello notebook"
+
+
+def test_embed_notebook_file_rolls_back_before_marking_failed(db_session, app, monkeypatch):
+    notebook_file = NotebookFileFactory(filename="notes.txt", object_key="flush-error-key", status="pending")
+    rollback_calls = []
+    original_rollback = db_session.rollback
+
+    monkeypatch.setattr(
+        "app.operations.notebooks.embed_notebook_file.download_file_to_path",
+        lambda settings, key, destination_path: destination_path.write_text("hello", encoding="utf-8"),
+    )
+
+    class FakeGenerateLocalEmbeddings:
+        errors = {}
+        embeddings = [
+            {"text": "hello", "embedding": [0.1, 0.2, 0.3], "metadata": {}},
+        ]
+
+        def __init__(self, **kwargs):
+            pass
+
+        def execute(self):
+            pass
+
+        def invalid(self):
+            return False
+
+    def fake_rollback():
+        rollback_calls.append(True)
+        original_rollback()
+
+    monkeypatch.setattr(
+        "app.operations.notebooks.embed_notebook_file.GenerateLocalEmbeddings",
+        lambda **kwargs: FakeGenerateLocalEmbeddings(**kwargs),
+    )
+    monkeypatch.setattr(db_session, "rollback", fake_rollback)
+    monkeypatch.setattr(
+        EmbedNotebookFile,
+        "_replace_vectors",
+        lambda self, embeddings: (_ for _ in ()).throw(RuntimeError("flush failed")),
+    )
+
+    operation = EmbedNotebookFile(db_session, app.state.settings, notebook_file)
+    operation.execute()
+
+    assert operation.invalid()
+    assert rollback_calls == [True]
+    db_session.expire_all()
+    failed_file = db_session.get(type(notebook_file), notebook_file.id)
+    assert failed_file.status == "failed"
+    assert failed_file.error_message == "flush failed"

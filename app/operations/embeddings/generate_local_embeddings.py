@@ -390,7 +390,7 @@ def _clean_text(value):
     if value is None:
         return ""
 
-    return str(value).strip()
+    return str(value).replace("\x00", "").strip()
 
 
 def _llama_class():

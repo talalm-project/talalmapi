@@ -48,6 +48,27 @@ def test_generate_local_embeddings_returns_vector_ready_records_for_txt(monkeypa
     ]
 
 
+def test_generate_local_embeddings_removes_nul_bytes_from_text(monkeypatch, tmp_path):
+    input_file = tmp_path / "notes.txt"
+    input_file.write_text("First\x00 paragraph.", encoding="utf-8")
+    model = SimpleNamespace(
+        embedding_name="Qwen Embedding",
+        embedding_local_file_path="/models/qwen-embedding.gguf",
+    )
+    FakeLlama.calls = []
+    monkeypatch.setattr("app.operations.embeddings.generate_local_embeddings._llama_class", lambda: FakeLlama)
+
+    operation = GenerateLocalEmbeddings(
+        local_embedding_model=model,
+        input_file=input_file,
+    )
+    operation.execute()
+
+    assert operation.valid()
+    assert FakeLlama.calls == ["First paragraph."]
+    assert operation.embeddings[0]["text"] == "First paragraph."
+
+
 def test_generate_local_embeddings_accepts_manifest_model_dict(monkeypatch, tmp_path):
     input_file = tmp_path / "notes.txt"
     input_file.write_text("Content", encoding="utf-8")

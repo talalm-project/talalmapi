@@ -6,7 +6,7 @@ from sqlalchemy import delete as sql_delete
 from app.models.notebook_vector import NotebookVector
 from app.operations.connectors.metadata import embedding_chunk_options, embedding_max_input_tokens, embedding_model_options
 from app.operations.embeddings import GenerateLocalEmbeddings
-from app.operations.embeddings.generate_local_embeddings import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE
+from app.operations.embeddings.generate_local_embeddings import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, _clean_text
 from app.operations.validator import Validator
 from app.storage import download_file_to_path
 
@@ -100,7 +100,7 @@ class EmbedNotebookFile(Validator):
                 notebook_file_id=self.notebook_file.id,
                 embedding_config_id=self.embedding_config.id,
                 chunk_index=index,
-                text=embedding_record["text"],
+                text=_clean_text(embedding_record["text"]),
                 embedding=embedding_record["embedding"],
                 metadata_=embedding_record.get("metadata", {}),
             )
@@ -110,6 +110,7 @@ class EmbedNotebookFile(Validator):
         self.session.flush()
 
     def _mark_failed(self, message=None):
+        self.session.rollback()
         self.notebook_file.status = "failed"
         self.notebook_file.error_message = message or "Unable to embed notebook file."
         self.session.commit()
