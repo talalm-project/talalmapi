@@ -8,6 +8,7 @@ small Python command runner through `app/cli.py`.
 python -m app.cli server
 python -m app.cli spec spec/users/test_create.py
 python -m app.cli system:seed
+python -m app.cli system:restore_factory_settings
 python -m app.cli services:create_bucket
 python -m app.cli db:create
 python -m app.cli db:upgrade
@@ -22,6 +23,10 @@ python -m app.cli db:upgrade
 
 `services:create_bucket` creates the RustFS bucket configured by the backend
 `.env` storage settings.
+
+`system:restore_factory_settings` drops the configured database, recreates it,
+runs all migrations, and seeds the default admin user. It is destructive and
+should only be run against a database you intend to reset.
 
 ## 7.2 Where tasks live
 - `app/cli.py`: command parsing and reusable helpers such as database creation

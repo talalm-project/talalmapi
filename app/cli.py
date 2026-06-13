@@ -69,6 +69,72 @@ def create_database(settings):
         print(f"Database created: {db_name}")
 
 
+def drop_database(settings):
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.engine import make_url
+
+    database_uri = settings.SQLALCHEMY_DATABASE_URI
+    if not database_uri:
+        raise RuntimeError("SQLALCHEMY_DATABASE_URI is not configured.")
+
+    url = make_url(database_uri)
+    if url.get_backend_name() == "sqlite":
+        _drop_sqlite_db(url.database)
+        return
+
+    db_name = url.database
+    if not db_name:
+        raise RuntimeError("Database name is missing from SQLALCHEMY_DATABASE_URI.")
+    if db_name in {"postgres", "template0", "template1"}:
+        raise RuntimeError(f"Refusing to drop PostgreSQL system database: {db_name}")
+
+    try:
+        admin_url = url.set(database="postgres")
+    except AttributeError:
+        admin_url = url._replace(database="postgres")
+
+    engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
+    with engine.connect() as connection:
+        exists = connection.execute(
+            text("SELECT 1 FROM pg_database WHERE datname = :name"),
+            {"name": db_name},
+        ).scalar()
+        if not exists:
+            print(f"Database does not exist: {db_name}")
+            return
+
+        connection.execute(
+            text(
+                """
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = :name
+                  AND pid <> pg_backend_pid()
+                """
+            ),
+            {"name": db_name},
+        )
+        connection.execute(text(f"DROP DATABASE {_quote_identifier(db_name)}"))
+        print(f"Database dropped: {db_name}")
+
+
+def _drop_sqlite_db(database_path):
+    if not database_path or database_path == ":memory:":
+        print("SQLite in-memory database does not need dropping.")
+        return
+
+    path = Path(database_path)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+
+    if not path.exists():
+        print(f"SQLite database does not exist: {path}")
+        return
+
+    path.unlink()
+    print(f"SQLite database dropped: {path}")
+
+
 def _active_settings():
     from app.environment import load_environment
 
@@ -140,6 +206,16 @@ def run_greet(_args):
 def run_db_create(_args):
     create_database(_active_settings())
     return 0
+
+
+def run_system_restore_factory_settings(_args):
+    settings = _active_settings()
+    drop_database(settings)
+    create_database(settings)
+    upgrade_status = run_db_upgrade(argparse.Namespace(revision="head"))
+    if upgrade_status != 0:
+        return upgrade_status
+    return run_system_seed(argparse.Namespace())
 
 
 def run_db_migrate(args):
@@ -306,6 +382,12 @@ def build_parser():
 
     doctor_parser = subparsers.add_parser("system:doctor", help="Print sanitized system configuration")
     doctor_parser.set_defaults(handler=run_system_doctor)
+
+    restore_factory_settings_parser = subparsers.add_parser(
+        "system:restore_factory_settings",
+        help="Drop, recreate, migrate, and seed the configured database",
+    )
+    restore_factory_settings_parser.set_defaults(handler=run_system_restore_factory_settings)
 
     notebook_worker_parser = subparsers.add_parser(
         "system:start_notebook_worker",

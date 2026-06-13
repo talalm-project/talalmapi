@@ -3,6 +3,7 @@ import json
 
 from app.cli import (
     build_parser,
+    run_system_restore_factory_settings,
     run_services_create_bucket,
     run_system_doctor,
     run_system_seed,
@@ -112,6 +113,51 @@ def test_system_doctor_command_is_registered():
     assert args.handler is run_system_doctor
 
 
+def test_restore_factory_settings_drops_creates_migrates_and_seeds(app, monkeypatch):
+    calls = []
+
+    monkeypatch.setattr("app.cli._active_settings", lambda: app.state.settings)
+    monkeypatch.setattr("app.cli.drop_database", lambda settings: calls.append(("drop", settings)))
+    monkeypatch.setattr("app.cli.create_database", lambda settings: calls.append(("create", settings)))
+    monkeypatch.setattr(
+        "app.cli.run_db_upgrade",
+        lambda args: calls.append(("upgrade", args.revision)) or 0,
+    )
+    monkeypatch.setattr(
+        "app.cli.run_system_seed",
+        lambda args: calls.append(("seed", args)) or 0,
+    )
+
+    result = run_system_restore_factory_settings(SimpleNamespace())
+
+    assert result == 0
+    assert calls[0] == ("drop", app.state.settings)
+    assert calls[1] == ("create", app.state.settings)
+    assert calls[2] == ("upgrade", "head")
+    assert calls[3][0] == "seed"
+
+
+def test_restore_factory_settings_stops_when_migration_fails(app, monkeypatch):
+    calls = []
+
+    monkeypatch.setattr("app.cli._active_settings", lambda: app.state.settings)
+    monkeypatch.setattr("app.cli.drop_database", lambda settings: calls.append("drop"))
+    monkeypatch.setattr("app.cli.create_database", lambda settings: calls.append("create"))
+    monkeypatch.setattr("app.cli.run_db_upgrade", lambda args: calls.append("upgrade") or 1)
+    monkeypatch.setattr("app.cli.run_system_seed", lambda args: calls.append("seed") or 0)
+
+    result = run_system_restore_factory_settings(SimpleNamespace())
+
+    assert result == 1
+    assert calls == ["drop", "create", "upgrade"]
+
+
+def test_restore_factory_settings_command_is_registered():
+    args = build_parser().parse_args(["system:restore_factory_settings"])
+
+    assert args.handler is run_system_restore_factory_settings
+
+
 def test_start_notebook_worker_command_is_registered():
     args = build_parser().parse_args(["system:start_notebook_worker"])
 
@@ -145,6 +191,7 @@ def test_namespaced_commands_use_colon_separator():
 
     assert parser.parse_args(["system:greet"]).command == "system:greet"
     assert parser.parse_args(["system:doctor"]).command == "system:doctor"
+    assert parser.parse_args(["system:restore_factory_settings"]).command == "system:restore_factory_settings"
     assert parser.parse_args(["system:start_notebook_worker"]).command == "system:start_notebook_worker"
     assert parser.parse_args(["db:migrate"]).command == "db:migrate"
     assert parser.parse_args(["db:downgrade"]).command == "db:downgrade"
