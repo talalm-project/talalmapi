@@ -534,6 +534,113 @@ def test_infer_notebook_retrieves_top_k_context(client, app, db_session, monkeyp
     ]
 
 
+def test_infer_notebook_manual_retrieval_includes_selected_documents(client, app, db_session, monkeypatch):
+    user = UserFactory(role="user")
+    connector = ConnectorFactory(user=user, connection_type="local", local_file_path="/tmp/model.gguf")
+    notebook = NotebookFactory(user=user, connector=connector)
+    first_file = NotebookFileFactory(
+        notebook=notebook,
+        name="First Memo",
+        filename="first.txt",
+        content_type="text/plain",
+        object_key="first-key",
+        status="uploaded",
+    )
+    second_file = NotebookFileFactory(
+        notebook=notebook,
+        name="Second Memo",
+        filename="second.txt",
+        content_type="text/plain",
+        object_key="second-key",
+        status="pending",
+    )
+    unselected_file = NotebookFileFactory(
+        notebook=notebook,
+        name="Ignored Memo",
+        filename="ignored.txt",
+        content_type="text/plain",
+        object_key="ignored-key",
+        status="active",
+    )
+    NotebookVectorFactory(
+        notebook=notebook,
+        notebook_file=unselected_file,
+        embedding_config=notebook.embedding_config,
+        text="Vector retrieval content should not be used.",
+        embedding=[1.0, 0.0, 0.0],
+    )
+    captured = {}
+
+    def fake_download_file_to_path(_settings, key, destination_path):
+        content_by_key = {
+            "first-key": "Full text from the first uploaded document.",
+            "second-key": "Full text from the second uploaded document.",
+            "ignored-key": "Ignored uploaded document text.",
+        }
+        destination_path.write_text(content_by_key[key], encoding="utf-8")
+
+    class FakeLlama:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create_chat_completion(self, **kwargs):
+            captured["completion"] = kwargs
+            return {"choices": [{"message": {"role": "assistant", "content": "answer"}}]}
+
+    monkeypatch.setattr("app.operations.notebooks.manual_retrieve_context.download_file_to_path", fake_download_file_to_path)
+    monkeypatch.setattr("app.operations.notebooks.generate_query_embedding._llama_class", lambda: (_ for _ in ()).throw(AssertionError("embedding should not run")))
+    monkeypatch.setattr("app.operations.connectors.infer._llama_class", lambda: FakeLlama)
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/infer",
+        headers=_headers(app, user),
+        json={
+            "prompt": "Summarize the selected docs",
+            "manual_retrieval": True,
+            "document_ids": [first_file.id, second_file.id],
+        },
+    )
+
+    prompt = captured["completion"]["messages"][0]["content"]
+    assert response.status_code == 200
+    assert "Full text from the first uploaded document." in prompt
+    assert "Full text from the second uploaded document." in prompt
+    assert "Ignored uploaded document text." not in prompt
+    assert "Vector retrieval content should not be used." not in prompt
+    assert response.json()["sources"] == [
+        {
+            "id": first_file.id,
+            "name": "First Memo",
+            "filename": "first.txt",
+            "content_type": "text/plain",
+            "byte_size": first_file.byte_size,
+            "url": None,
+        },
+        {
+            "id": second_file.id,
+            "name": "Second Memo",
+            "filename": "second.txt",
+            "content_type": "text/plain",
+            "byte_size": second_file.byte_size,
+            "url": None,
+        },
+    ]
+
+
+def test_infer_notebook_manual_retrieval_requires_document_ids(client, app, db_session):
+    user = UserFactory(role="user")
+    notebook = NotebookFactory(user=user)
+
+    response = client.post(
+        f"/notebooks/{notebook.id}/infer",
+        headers=_headers(app, user),
+        json={"prompt": "Summarize", "manual_retrieval": True},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"document_ids": ["required"]}
+
+
 def test_infer_notebook_includes_context_notes(client, app, db_session, monkeypatch):
     user = UserFactory(role="user")
     connector = ConnectorFactory(user=user, connection_type="local", local_file_path="/tmp/model.gguf")

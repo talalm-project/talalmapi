@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.schemas.connector import ConnectorInfer
 
 
 class NotebookCreate(BaseModel):
@@ -9,6 +11,11 @@ class NotebookCreate(BaseModel):
 
 class NotebookUpdate(BaseModel):
     title: str | None = None
+
+
+class NotebookInfer(ConnectorInfer):
+    manual_retrieval: bool = False
+    document_ids: list[str] = Field(default_factory=list)
 
 
 class NotebookConnectorOut(BaseModel):

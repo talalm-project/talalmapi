@@ -117,21 +117,7 @@ class GenerateLocalEmbeddings:
         return errors
 
     def _extract_text_blocks(self):
-        input_path = self._input_path()
-        extension = input_path.suffix.lower()
-
-        if extension == ".txt":
-            return _extract_txt(input_path)
-        if extension == ".docx":
-            return _extract_docx(input_path)
-        if extension == ".pptx":
-            return _extract_pptx(input_path)
-        if extension == ".xlsx":
-            return _extract_xlsx(input_path)
-        if extension == ".pdf":
-            return _extract_pdf(input_path)
-
-        return []
+        return extract_text_blocks(self._input_path())
 
     def _chunk_blocks(self, blocks):
         chunks = []
@@ -193,6 +179,24 @@ class GenerateLocalEmbeddings:
 
 def _extract_txt(input_path):
     return [{"text": input_path.read_text(encoding="utf-8"), "metadata": {}}]
+
+
+def extract_text_blocks(input_file):
+    input_path = Path(input_file)
+    extension = input_path.suffix.lower()
+
+    if extension == ".txt":
+        return _extract_txt(input_path)
+    if extension == ".docx":
+        return _extract_docx(input_path)
+    if extension == ".pptx":
+        return _extract_pptx(input_path)
+    if extension == ".xlsx":
+        return _extract_xlsx(input_path)
+    if extension == ".pdf":
+        return _extract_pdf(input_path)
+
+    return []
 
 
 def _extract_docx(input_path):

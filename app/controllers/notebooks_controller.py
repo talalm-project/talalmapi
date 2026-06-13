@@ -23,9 +23,8 @@ from app.operations.notebooks import (
     Show,
     ToggleNoteContext,
 )
-from app.schemas.connector import ConnectorInfer
 from app.schemas.notebook_file import NotebookFileCollection, NotebookFileOut
-from app.schemas.notebook import NotebookCollection, NotebookCreate, NotebookOut, NotebookUpdate
+from app.schemas.notebook import NotebookCollection, NotebookCreate, NotebookInfer, NotebookOut, NotebookUpdate
 from app.schemas.notebook_note import NotebookNoteCollection, NotebookNoteCreate, NotebookNoteOut
 
 
@@ -114,12 +113,19 @@ def update(
 
 @router.post("/{notebook_id}/infer")
 def infer(
+    request: Request,
     notebook_id: str,
-    payload: ConnectorInfer,
+    payload: NotebookInfer,
     current_user: User = Depends(require_active_user),
     session: Session = Depends(get_db),
 ):
-    operation = Infer(session=session, user=current_user, notebook_id=notebook_id, payload=payload)
+    operation = Infer(
+        session=session,
+        user=current_user,
+        notebook_id=notebook_id,
+        payload=payload,
+        settings=request.app.state.settings,
+    )
     operation.execute()
     if not operation.found():
         return JSONResponse(status_code=404, content={"message": "not found"})

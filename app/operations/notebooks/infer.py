@@ -4,15 +4,17 @@ from app.models.notebook_note import NotebookNote
 from app.operations.connectors.infer import Infer as ConnectorInfer
 from app.operations.notebooks.access import visible_notebook
 from app.operations.notebooks.build_rag_payload import BuildRagPayload
+from app.operations.notebooks.manual_retrieve_context import ManualRetrieveContext
 from app.operations.notebooks.retrieve_context import RetrieveContext
 
 
 class Infer:
-    def __init__(self, session, user, notebook_id, payload):
+    def __init__(self, session, user, notebook_id, payload, settings=None):
         self.session = session
         self.user = user
         self.notebook_id = notebook_id
         self.payload = payload
+        self.settings = settings
         self.notebook = None
         self.response = None
         self.errors = {}
@@ -24,13 +26,7 @@ class Infer:
 
         current_question = _current_question_from_payload(self.payload)
         query = _query_from_payload(self.payload, current_question=current_question)
-        retrieve_operation = RetrieveContext(
-            session=self.session,
-            notebook=self.notebook,
-            query=query,
-            k=self.payload.k,
-            target_query=current_question,
-        )
+        retrieve_operation = self._retrieve_operation(query, current_question)
         retrieve_operation.execute()
         if not retrieve_operation.valid():
             self.errors = retrieve_operation.errors
@@ -61,6 +57,23 @@ class Infer:
 
     def valid(self):
         return not self.errors
+
+    def _retrieve_operation(self, query, current_question):
+        if self.payload.manual_retrieval:
+            return ManualRetrieveContext(
+                session=self.session,
+                settings=self.settings,
+                notebook=self.notebook,
+                document_ids=self.payload.document_ids,
+            )
+
+        return RetrieveContext(
+            session=self.session,
+            notebook=self.notebook,
+            query=query,
+            k=self.payload.k,
+            target_query=current_question,
+        )
 
     def _sources_from_chunks(self, chunks):
         notebook_file_ids = []
