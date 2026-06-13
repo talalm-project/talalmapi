@@ -336,6 +336,18 @@ def run_system_doctor(_args):
     return 0
 
 
+def run_system_create_backup(args):
+    from app.operations.system import CreateBackup
+
+    operation = CreateBackup(_active_settings(), args.output)
+    operation.execute()
+    payload = operation.to_dict()
+    print(f"Backup created: {payload['output_path']}")
+    for warning in payload["warnings"]:
+        print(f"Warning: {warning}")
+    return 0
+
+
 def run_system_start_notebook_worker(_args):
     from app.db import db
     from app.operations.notebooks import NotebookWorker
@@ -382,6 +394,10 @@ def build_parser():
 
     doctor_parser = subparsers.add_parser("system:doctor", help="Print sanitized system configuration")
     doctor_parser.set_defaults(handler=run_system_doctor)
+
+    create_backup_parser = subparsers.add_parser("system:create_backup", help="Create a portable local backup zip")
+    create_backup_parser.add_argument("--output", required=True, help="Path to the backup zip file to create")
+    create_backup_parser.set_defaults(handler=run_system_create_backup)
 
     restore_factory_settings_parser = subparsers.add_parser(
         "system:restore_factory_settings",

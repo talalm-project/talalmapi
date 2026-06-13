@@ -3,6 +3,7 @@ import json
 
 from app.cli import (
     build_parser,
+    run_system_create_backup,
     run_system_restore_factory_settings,
     run_services_create_bucket,
     run_system_doctor,
@@ -113,6 +114,41 @@ def test_system_doctor_command_is_registered():
     assert args.handler is run_system_doctor
 
 
+def test_system_create_backup_runs_operation(app, tmp_path, capsys, monkeypatch):
+    captured = {}
+    output_path = tmp_path / "backup.zip"
+
+    class FakeCreateBackup:
+        def __init__(self, settings, output):
+            captured["settings"] = settings
+            captured["output"] = output
+
+        def execute(self):
+            captured["execute"] = True
+
+        def to_dict(self):
+            return {"output_path": str(output_path), "warnings": ["example warning"]}
+
+    monkeypatch.setattr("app.cli._active_settings", lambda: app.state.settings)
+    monkeypatch.setattr("app.operations.system.CreateBackup", FakeCreateBackup)
+
+    result = run_system_create_backup(SimpleNamespace(output=str(output_path)))
+
+    assert result == 0
+    assert captured == {"settings": app.state.settings, "output": str(output_path), "execute": True}
+    assert capsys.readouterr().out.splitlines() == [
+        f"Backup created: {output_path}",
+        "Warning: example warning",
+    ]
+
+
+def test_system_create_backup_command_is_registered():
+    args = build_parser().parse_args(["system:create_backup", "--output", "/tmp/backup.zip"])
+
+    assert args.handler is run_system_create_backup
+    assert args.output == "/tmp/backup.zip"
+
+
 def test_restore_factory_settings_drops_creates_migrates_and_seeds(app, monkeypatch):
     calls = []
 
@@ -191,6 +227,7 @@ def test_namespaced_commands_use_colon_separator():
 
     assert parser.parse_args(["system:greet"]).command == "system:greet"
     assert parser.parse_args(["system:doctor"]).command == "system:doctor"
+    assert parser.parse_args(["system:create_backup", "--output", "/tmp/backup.zip"]).command == "system:create_backup"
     assert parser.parse_args(["system:restore_factory_settings"]).command == "system:restore_factory_settings"
     assert parser.parse_args(["system:start_notebook_worker"]).command == "system:start_notebook_worker"
     assert parser.parse_args(["db:migrate"]).command == "db:migrate"

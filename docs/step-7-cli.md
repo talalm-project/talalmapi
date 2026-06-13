@@ -7,6 +7,7 @@ small Python command runner through `app/cli.py`.
 ```bash
 python -m app.cli server
 python -m app.cli spec spec/users/test_create.py
+python -m app.cli system:create_backup --output /tmp/talalm-backup.zip
 python -m app.cli system:seed
 python -m app.cli system:restore_factory_settings
 python -m app.cli services:create_bucket
@@ -23,6 +24,11 @@ python -m app.cli db:upgrade
 
 `services:create_bucket` creates the RustFS bucket configured by the backend
 `.env` storage settings.
+
+`system:create_backup` creates a local zip archive containing a PostgreSQL dump,
+RustFS bucket objects, local model files, model manifest, nearby env files, and
+`backup.json` metadata. PostgreSQL backups require `pg_dump` to be installed in
+the environment running the command.
 
 `system:restore_factory_settings` drops the configured database, recreates it,
 runs all migrations, and seeds the default admin user. It is destructive and
