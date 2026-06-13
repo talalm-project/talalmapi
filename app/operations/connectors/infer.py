@@ -3,7 +3,6 @@ from time import perf_counter
 from app.operations.connectors.metadata import (
     inference_default_output_tokens,
     inference_local_file_path,
-    inference_model_name,
     inference_model_options,
 )
 from app.services.llama_model_cache import llama_model_cache
@@ -25,15 +24,7 @@ class Infer:
         if self.errors:
             return
 
-        if self.connector.connection_type == "local":
-            self.response = self._infer_local()
-            return
-
-        if self.connector.connection_type == "openai":
-            self.response = self._infer_openai()
-            return
-
-        self.errors = {"connection_type": ["unsupported"]}
+        self.response = self._infer_local()
 
     def valid(self):
         return not self.errors
@@ -44,24 +35,17 @@ class Infer:
         if not isinstance(self.payload.options, dict):
             errors["options"] = ["invalid"]
 
-        if self.connector.connection_type == "local":
-            local_file_path = inference_local_file_path(self.connector)
-            if not local_file_path:
-                errors["local_file_path"] = ["required"]
-            elif not local_file_path.lower().endswith(".gguf"):
-                errors["local_file_path"] = ["must be a .gguf model"]
-            if self.payload.input is not None and not isinstance(self.payload.input, (str, list)):
-                errors["input"] = ["invalid"]
-            if self.payload.input is not None and isinstance(self.payload.input, list) and not self.payload.input:
-                errors["input"] = ["required"]
-            if self.payload.input is None and (not isinstance(self._local_prompt(), str) or not self._local_prompt().strip()):
-                errors["prompt"] = ["required"]
-
-        if self.connector.connection_type == "openai":
-            if not self.connector.api_key:
-                errors["api_key"] = ["required"]
-            if self._openai_input() is None:
-                errors["input"] = ["required"]
+        local_file_path = inference_local_file_path(self.connector)
+        if not local_file_path:
+            errors["local_file_path"] = ["required"]
+        elif not local_file_path.lower().endswith(".gguf"):
+            errors["local_file_path"] = ["must be a .gguf model"]
+        if self.payload.input is not None and not isinstance(self.payload.input, (str, list)):
+            errors["input"] = ["invalid"]
+        if self.payload.input is not None and isinstance(self.payload.input, list) and not self.payload.input:
+            errors["input"] = ["required"]
+        if self.payload.input is None and (not isinstance(self._local_prompt(), str) or not self._local_prompt().strip()):
+            errors["prompt"] = ["required"]
 
         return errors
 
@@ -77,19 +61,6 @@ class Infer:
         except ValueError as error:
             self.errors = {"inference": [str(error)]}
             return None
-        return _response_with_details(response, perf_counter() - started_at)
-
-    def _infer_openai(self):
-        openai_client_class = _openai_client_class()
-        client = openai_client_class(api_key=self.connector.api_key)
-        options = dict(self.payload.options)
-        if self.system_prompt and "instructions" not in options:
-            options["instructions"] = self.system_prompt
-
-        started_at = perf_counter()
-        response = _serialize_response(
-            client.responses.create(model=self.payload.model or inference_model_name(self.connector), input=self._openai_input(), **options)
-        )
         return _response_with_details(response, perf_counter() - started_at)
 
     def _local_prompt(self):
@@ -111,13 +82,6 @@ class Infer:
             return [{"role": "system", "content": self.system_prompt}, *messages]
 
         return messages
-
-    def _openai_input(self):
-        if self.payload.input is not None:
-            return self.payload.input
-
-        return self.payload.prompt
-
 
 def _serialize_response(response):
     if hasattr(response, "model_dump"):
@@ -200,9 +164,3 @@ def _llama_class():
     from llama_cpp import Llama
 
     return Llama
-
-
-def _openai_client_class():
-    from openai import OpenAI
-
-    return OpenAI

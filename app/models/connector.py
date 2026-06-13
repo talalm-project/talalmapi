@@ -8,10 +8,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 from app.models.user import utcnow
 
-
-ALLOWED_CONNECTION_TYPES = {"local", "openai"}
-
-
 class Connector(Base):
     __tablename__ = "connectors"
     __table_args__ = (UniqueConstraint("user_id", "code", name="uq_connectors_user_id_code"),)
@@ -25,11 +21,10 @@ class Connector(Base):
     )
     code: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    connection_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    connection_type: Mapped[str] = mapped_column(String(50), nullable=False, default="local")
     local_file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     embedding_local_file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     embedding_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -49,7 +44,6 @@ class Connector(Base):
             "user_id": self.user_id,
             "code": self.code,
             "name": self.name,
-            "connection_type": self.connection_type,
             "local_file_path": self.local_file_path,
             "embedding_local_file_path": self.embedding_local_file_path,
             "embedding_name": self.embedding_name,

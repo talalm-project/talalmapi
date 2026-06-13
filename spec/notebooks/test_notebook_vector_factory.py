@@ -6,7 +6,7 @@ def test_embedding_config_factory_creates_connector_config(db_session):
 
     assert embedding_config.id is not None
     assert embedding_config.connector_id == embedding_config.connector.id
-    assert embedding_config.provider == embedding_config.connector.connection_type
+    assert embedding_config.provider == "local"
     assert embedding_config.dimensions == 1536
     assert embedding_config.distance_metric == "cosine"
     assert embedding_config.to_dict()["config_hash"] == embedding_config.config_hash

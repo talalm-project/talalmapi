@@ -12,7 +12,6 @@ def test_dashboard_returns_research_monitoring_data(client, app, db_session):
     local_connector = ConnectorFactory(
         user=user,
         name="Local Research",
-        connection_type="local",
         data={
             "metadata": {
                 "provider": "local",
@@ -28,14 +27,14 @@ def test_dashboard_returns_research_monitoring_data(client, app, db_session):
             }
         },
     )
-    openai_connector = ConnectorFactory(
+    secondary_connector = ConnectorFactory(
         user=user,
-        name="OpenAI Research",
-        connection_type="openai",
-        embedding_name="text-embedding-3-small",
+        name="Secondary Local Research",
+        local_file_path="/tmp/secondary.gguf",
+        embedding_local_file_path="/tmp/secondary-embedding.gguf",
     )
     active_notebook = NotebookFactory(user=user, connector=local_connector, title="Literature Review")
-    empty_notebook = NotebookFactory(user=user, connector=openai_connector, title="Empty Notebook")
+    empty_notebook = NotebookFactory(user=user, connector=secondary_connector, title="Empty Notebook")
     active_file = NotebookFileFactory(notebook=active_notebook, name="Paper A", status="active", byte_size=2048)
     failed_file = NotebookFileFactory(
         notebook=active_notebook,
@@ -58,8 +57,7 @@ def test_dashboard_returns_research_monitoring_data(client, app, db_session):
         "notebooks_count": 2,
         "active_notebooks_count": 0,
         "connectors_count": 2,
-        "local_connectors_count": 1,
-        "openai_connectors_count": 1,
+        "local_connectors_count": 2,
         "active_files_count": 1,
         "queued_files_count": 1,
         "failed_files_count": 1,
@@ -72,7 +70,8 @@ def test_dashboard_returns_research_monitoring_data(client, app, db_session):
     assert review_row["health"] == "failed"
     assert review_row["file_summary"] == {"active": 1, "queued": 1, "failed": 1, "total": 3}
     assert review_row["connector"]["id"] == local_connector.id
-    assert payload["connectors"][0]["connector"]["id"] in {local_connector.id, openai_connector.id}
+    assert "connection_type" not in review_row["connector"]
+    assert payload["connectors"][0]["connector"]["id"] in {local_connector.id, secondary_connector.id}
     assert next(row for row in payload["connectors"] if row["connector"]["id"] == local_connector.id)["notebooks_count"] == 1
     assert [file["id"] for file in payload["attention_files"]] == [failed_file.id, queued_file.id]
     assert payload["attention_files"][0]["notebook"]["title"] == "Literature Review"

@@ -24,7 +24,6 @@ def upgrade():
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("connection_type", sa.String(length=50), nullable=False),
         sa.Column("local_file_path", sa.String(length=1024), nullable=True),
-        sa.Column("api_key", sa.String(length=255), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("data", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),

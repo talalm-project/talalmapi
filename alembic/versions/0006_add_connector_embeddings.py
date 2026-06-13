@@ -1,7 +1,7 @@
 """add embedding fields to connectors
 
 Revision ID: 0006_add_connector_embeddings
-Revises: 0005_rename_openai_type
+Revises: 0005_local_connector_only
 Create Date: 2026-05-21 00:00:00
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "0006_add_connector_embeddings"
-down_revision = "0005_rename_openai_type"
+down_revision = "0005_local_connector_only"
 branch_labels = None
 depends_on = None
 

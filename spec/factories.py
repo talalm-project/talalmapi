@@ -37,15 +37,14 @@ class ConnectorFactory(factory.alchemy.SQLAlchemyModelFactory):
     local_file_path = factory.Sequence(lambda n: f"/tmp/models/model-{n}.gguf")
     embedding_local_file_path = factory.Sequence(lambda n: f"/tmp/models/embedding-{n}.gguf")
     embedding_name = factory.Sequence(lambda n: f"Embedding {n}")
-    api_key = None
     data = factory.LazyAttribute(
         lambda connector: {
             "metadata": {
-                "provider": connector.connection_type,
+                "provider": "local",
                 "embeddings": {
                     "model": {
                         "name": connector.embedding_name,
-                        "local_file_path": connector.embedding_local_file_path if connector.connection_type == "local" else None,
+                        "local_file_path": connector.embedding_local_file_path,
                         "embedding_size": _factory_embedding_size(connector.embedding_name),
                     },
                     "model_options": {},
@@ -62,7 +61,7 @@ class EmbeddingConfigFactory(factory.alchemy.SQLAlchemyModelFactory):
         sqlalchemy_session_persistence = "commit"
 
     connector = factory.SubFactory(ConnectorFactory)
-    provider = factory.SelfAttribute("connector.connection_type")
+    provider = "local"
     model_name = factory.Sequence(lambda n: f"Embedding Model {n}")
     model_path = factory.Sequence(lambda n: f"/tmp/models/embedding-{n}.gguf")
     dimensions = 3

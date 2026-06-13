@@ -15,17 +15,6 @@ DEFAULT_LOCAL_VERBOSE = False
 DEFAULT_EMBEDDING_CHARS_PER_TOKEN = 4
 DEFAULT_EMBEDDING_CHUNK_RATIO = 0.75
 DEFAULT_EMBEDDING_CHUNK_OVERLAP_RATIO = 0.1
-OPENAI_DEFAULT_EMBEDDING_INPUT_TOKENS = 8191
-OPENAI_EMBEDDING_INPUT_TOKENS = {
-    "text-embedding-3-small": 8191,
-    "text-embedding-3-large": 8191,
-    "text-embedding-ada-002": 8191,
-}
-OPENAI_EMBEDDING_SIZES = {
-    "text-embedding-3-small": 1536,
-    "text-embedding-3-large": 3072,
-    "text-embedding-ada-002": 1536,
-}
 GGUF_TYPE_UINT8 = 0
 GGUF_TYPE_INT8 = 1
 GGUF_TYPE_UINT16 = 2
@@ -62,13 +51,12 @@ def build_connector_data(connector_attrs, data=None):
 
 def build_connector_metadata(connector_attrs, data=None):
     data = data or {}
-    connection_type = _get_value(connector_attrs, "connection_type") or "local"
 
     return {
         "schema_version": 1,
-        "provider": connection_type,
-        "inference": _inference_metadata(connector_attrs, data, connection_type),
-        "embeddings": _embeddings_metadata(connector_attrs, data, connection_type),
+        "provider": "local",
+        "inference": _inference_metadata(connector_attrs, data),
+        "embeddings": _embeddings_metadata(connector_attrs, data),
     }
 
 
@@ -153,22 +141,15 @@ def embedding_max_input_tokens(connector):
     return value if isinstance(value, int) and value > 0 else None
 
 
-def _inference_metadata(connector_attrs, data, connection_type):
+def _inference_metadata(connector_attrs, data):
     model_options = _dict_value(data.get("model_options"))
 
-    if connection_type == "local":
-        context_window_tokens = _local_inference_context_window(_get_value(connector_attrs, "local_file_path"), model_options)
-        model_options = {**model_options, "n_ctx": context_window_tokens}
-        model = {
-            "name": _get_value(connector_attrs, "name"),
-            "local_file_path": _get_value(connector_attrs, "local_file_path"),
-        }
-    else:
-        context_window_tokens = _positive_int(model_options.get("n_ctx"))
-        model = {
-            "name": _get_value(connector_attrs, "name"),
-            "local_file_path": None,
-        }
+    context_window_tokens = _local_inference_context_window(_get_value(connector_attrs, "local_file_path"), model_options)
+    model_options = {**model_options, "n_ctx": context_window_tokens}
+    model = {
+        "name": _get_value(connector_attrs, "name"),
+        "local_file_path": _get_value(connector_attrs, "local_file_path"),
+    }
 
     return {
         "model": model,
@@ -176,17 +157,14 @@ def _inference_metadata(connector_attrs, data, connection_type):
         "limits": {
             "context_window_tokens": context_window_tokens,
             "max_input_tokens": context_window_tokens,
-            "default_output_tokens": DEFAULT_LOCAL_OUTPUT_TOKENS if connection_type == "local" else None,
+            "default_output_tokens": DEFAULT_LOCAL_OUTPUT_TOKENS,
         },
     }
 
 
-def _embeddings_metadata(connector_attrs, data, connection_type):
+def _embeddings_metadata(connector_attrs, data):
     model_options = _dict_value(data.get("embedding_model_options"))
-    if connection_type == "local":
-        return _local_embeddings_metadata(connector_attrs, model_options)
-
-    return _openai_embeddings_metadata(connector_attrs, model_options)
+    return _local_embeddings_metadata(connector_attrs, model_options)
 
 
 def _local_embeddings_metadata(connector_attrs, model_options):
@@ -208,22 +186,6 @@ def _local_embeddings_metadata(connector_attrs, model_options):
         },
         "model_options": model_options,
         "limits": _embedding_limits(context_window_tokens, max_input_tokens),
-        "chunking": _embedding_chunking(max_input_tokens),
-    }
-
-
-def _openai_embeddings_metadata(connector_attrs, model_options):
-    model_name = _get_value(connector_attrs, "embedding_name")
-    max_input_tokens = OPENAI_EMBEDDING_INPUT_TOKENS.get(model_name, OPENAI_DEFAULT_EMBEDDING_INPUT_TOKENS)
-
-    return {
-        "model": {
-            "name": model_name,
-            "local_file_path": None,
-            "embedding_size": OPENAI_EMBEDDING_SIZES.get(model_name),
-        },
-        "model_options": model_options,
-        "limits": _embedding_limits(max_input_tokens, max_input_tokens),
         "chunking": _embedding_chunking(max_input_tokens),
     }
 
@@ -284,8 +246,6 @@ def _positive_int(value):
 
 def _with_local_inference_context(connector, options):
     normalized_options = dict(options)
-    if _get_value(connector, "connection_type") != "local":
-        return normalized_options
     normalized_options = _with_local_runtime_defaults(normalized_options)
     if _positive_int(normalized_options.get("n_ctx")):
         return normalized_options

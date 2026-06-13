@@ -46,8 +46,7 @@ class Infer:
         )
         payload_operation.execute()
 
-        connector_system_prompt = None if self.notebook.connector.connection_type == "local" else system_prompt
-        operation = ConnectorInfer(self.notebook.connector, payload_operation.rag_payload, system_prompt=connector_system_prompt)
+        operation = ConnectorInfer(self.notebook.connector, payload_operation.rag_payload)
         operation.execute()
         if not operation.valid():
             self.errors = operation.errors

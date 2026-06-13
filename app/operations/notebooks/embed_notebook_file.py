@@ -5,7 +5,7 @@ from sqlalchemy import delete as sql_delete
 
 from app.models.notebook_vector import NotebookVector
 from app.operations.connectors.metadata import embedding_chunk_options, embedding_max_input_tokens, embedding_model_options
-from app.operations.embeddings import GenerateLocalEmbeddings, GenerateOpenAIEmbeddings
+from app.operations.embeddings import GenerateLocalEmbeddings
 from app.operations.embeddings.generate_local_embeddings import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE
 from app.operations.validator import Validator
 from app.storage import download_file_to_path
@@ -24,7 +24,6 @@ class EmbedNotebookFile(Validator):
             "notebook_file": [],
             "notebook": [],
             "embedding_config": [],
-            "connection_type": [],
             "embedding": [],
         }
 
@@ -80,30 +79,15 @@ class EmbedNotebookFile(Validator):
     def _embedding_generator(self, input_path):
         connector = self.notebook.connector
         chunk_size, chunk_overlap = embedding_chunk_options(connector, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP)
-
-        if connector.connection_type == "local":
-            return GenerateLocalEmbeddings(
-                local_embedding_model=connector,
-                input_file=input_path,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                model_options=embedding_model_options(connector),
-                max_input_tokens=embedding_max_input_tokens(connector),
-                source_name=self.notebook_file.filename,
-            )
-
-        if connector.connection_type == "openai":
-            return GenerateOpenAIEmbeddings(
-                connector=connector,
-                input_file=input_path,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                source_name=self.notebook_file.filename,
-            )
-
-        self.payload["connection_type"].append("unsupported")
-        self.count_errors()
-        return _InvalidEmbeddingGenerator(self.payload)
+        return GenerateLocalEmbeddings(
+            local_embedding_model=connector,
+            input_file=input_path,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            model_options=embedding_model_options(connector),
+            max_input_tokens=embedding_max_input_tokens(connector),
+            source_name=self.notebook_file.filename,
+        )
 
     def _replace_vectors(self, embeddings):
         self.session.execute(
@@ -130,14 +114,3 @@ class EmbedNotebookFile(Validator):
         self.notebook_file.error_message = message or "Unable to embed notebook file."
         self.session.commit()
         self.session.refresh(self.notebook_file)
-
-
-class _InvalidEmbeddingGenerator:
-    def __init__(self, errors):
-        self.errors = errors
-
-    def execute(self):
-        return None
-
-    def invalid(self):
-        return True

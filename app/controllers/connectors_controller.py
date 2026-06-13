@@ -15,7 +15,7 @@ from app.operations.connectors.metadata import embedding_chunk_options, embeddin
 from app.operations.connectors.infer import Infer
 from app.operations.connectors.save import Save
 from app.operations.embeddings.generate_local_embeddings import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE
-from app.operations.embeddings import GenerateLocalEmbeddings, GenerateOpenAIEmbeddings
+from app.operations.embeddings import GenerateLocalEmbeddings
 from app.schemas.connector import ConnectorCollection, ConnectorCreate, ConnectorInfer, ConnectorOut, ConnectorUpdate
 
 
@@ -42,11 +42,9 @@ def create(
         user=current_user,
         code=payload.code,
         name=payload.name,
-        connection_type=payload.connection_type,
         local_file_path=payload.local_file_path,
         embedding_local_file_path=payload.embedding_local_file_path,
         embedding_name=payload.embedding_name,
-        api_key=payload.api_key,
         data=payload.data,
     )
     operation.execute()
@@ -59,7 +57,6 @@ def create(
 @router.get("", response_model=ConnectorCollection)
 def index(
     name: str | None = None,
-    connection_type: str | None = None,
     current_user: User = Depends(require_active_user),
     session: Session = Depends(get_db),
 ):
@@ -68,8 +65,6 @@ def index(
         stmt = stmt.where(Connector.user_id == current_user.id)
     if name:
         stmt = stmt.where(Connector.name.ilike(f"%{name}%"))
-    if connection_type:
-        stmt = stmt.where(Connector.connection_type == connection_type)
 
     connectors = session.execute(stmt).scalars().all()
     return {"records": [connector.to_dict() for connector in connectors]}
@@ -122,27 +117,15 @@ def generate_embeddings(
     input_path = _save_upload_to_temp_file(file)
     try:
         chunk_size, chunk_overlap = embedding_chunk_options(connector, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP)
-        if connector.connection_type == "local":
-            operation = GenerateLocalEmbeddings(
-                local_embedding_model=connector,
-                input_file=input_path,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                model_options=embedding_model_options(connector),
-                max_input_tokens=embedding_max_input_tokens(connector),
-                source_name=file.filename,
-            )
-        elif connector.connection_type == "openai":
-            operation = GenerateOpenAIEmbeddings(
-                connector=connector,
-                input_file=input_path,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                source_name=file.filename,
-            )
-        else:
-            return JSONResponse(status_code=422, content={"connection_type": ["unsupported"]})
-
+        operation = GenerateLocalEmbeddings(
+            local_embedding_model=connector,
+            input_file=input_path,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            model_options=embedding_model_options(connector),
+            max_input_tokens=embedding_max_input_tokens(connector),
+            source_name=file.filename,
+        )
         operation.execute()
         if operation.invalid():
             return JSONResponse(status_code=422, content=operation.errors)
@@ -174,11 +157,9 @@ def update(
         connector=connector,
         code=payload.code,
         name=payload.name,
-        connection_type=payload.connection_type,
         local_file_path=payload.local_file_path,
         embedding_local_file_path=payload.embedding_local_file_path,
         embedding_name=payload.embedding_name,
-        api_key=payload.api_key,
         data=payload.data,
         changed_fields=changed_fields,
     )

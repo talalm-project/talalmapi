@@ -93,60 +93,6 @@ def test_embed_notebook_file_generates_vectors_and_marks_file_active(db_session,
     assert vectors[1].chunk_index == 1
 
 
-def test_embed_notebook_file_uses_openai_embedding_generator(db_session, app, monkeypatch):
-    connector = ConnectorFactory(
-        connection_type="openai",
-        local_file_path=None,
-        api_key="sk-secret",
-        embedding_name="text-embedding-3-small",
-        data={
-            "metadata": {
-                "provider": "openai",
-                "embeddings": {
-                    "model": {
-                        "name": "text-embedding-3-small",
-                        "local_file_path": None,
-                        "embedding_size": 1536,
-                    },
-                    "model_options": {},
-                },
-            }
-        },
-    )
-    notebook = NotebookFactory(connector=connector)
-    notebook_file = NotebookFileFactory(notebook=notebook, filename="notes.txt", object_key="openai-key")
-    captured = {}
-
-    monkeypatch.setattr(
-        "app.operations.notebooks.embed_notebook_file.download_file_to_path",
-        lambda settings, key, destination_path: destination_path.write_text("hello", encoding="utf-8"),
-    )
-
-    class FakeGenerateOpenAIEmbeddings:
-        def __init__(self, **kwargs):
-            captured["generator"] = kwargs
-            self.embeddings = [{"text": "hello", "embedding": [0.1, 0.2, 0.3], "metadata": {}}]
-
-        def execute(self):
-            pass
-
-        def invalid(self):
-            return False
-
-    monkeypatch.setattr(
-        "app.operations.notebooks.embed_notebook_file.GenerateOpenAIEmbeddings",
-        lambda **kwargs: FakeGenerateOpenAIEmbeddings(**kwargs),
-    )
-
-    operation = EmbedNotebookFile(db_session, app.state.settings, notebook_file)
-    operation.execute()
-
-    assert operation.valid()
-    assert captured["generator"]["connector"] == connector
-    assert captured["generator"]["source_name"] == "notes.txt"
-    assert db_session.get(type(notebook_file), notebook_file.id).status == "active"
-
-
 def test_embed_notebook_file_marks_file_failed_when_generator_errors(db_session, app, monkeypatch):
     notebook_file = NotebookFileFactory(filename="notes.txt", object_key="broken-key", status="pending")
 

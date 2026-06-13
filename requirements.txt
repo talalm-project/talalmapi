@@ -14,7 +14,6 @@ pytest
 factory_boy
 httpx
 llama-cpp-python
-openai
 python-docx
 python-pptx
 openpyxl

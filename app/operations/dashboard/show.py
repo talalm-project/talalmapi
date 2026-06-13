@@ -114,8 +114,7 @@ class Show:
                 ]
             ),
             "connectors_count": len(self.connectors),
-            "local_connectors_count": len([connector for connector in self.connectors if connector.connection_type == "local"]),
-            "openai_connectors_count": len([connector for connector in self.connectors if connector.connection_type == "openai"]),
+            "local_connectors_count": len(self.connectors),
             "active_files_count": active_files_count,
             "queued_files_count": queued_files_count,
             "failed_files_count": failed_files_count,

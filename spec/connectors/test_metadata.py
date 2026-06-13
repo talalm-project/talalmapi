@@ -88,19 +88,6 @@ def test_build_local_connector_metadata_uses_null_embedding_size_when_gguf_is_un
     assert metadata["inference"]["model_options"]["n_ctx"] == 4096
 
 
-def test_build_openai_connector_metadata_includes_embedding_size():
-    metadata = build_connector_metadata(
-        {
-            "name": "gpt-4.1",
-            "connection_type": "openai",
-            "embedding_name": "text-embedding-3-large",
-        },
-        {},
-    )
-
-    assert metadata["embeddings"]["model"]["embedding_size"] == 3072
-
-
 def _write_gguf_metadata(path, records):
     data = bytearray()
     data.extend(b"GGUF")

@@ -231,7 +231,7 @@ class BuildRagPayload:
         return context
 
     def _local_connector(self):
-        return self.connector is not None and self.connector.connection_type == "local"
+        return self.connector is not None
 
 
 def _last_user_text(messages):

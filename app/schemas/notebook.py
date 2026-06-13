@@ -16,7 +16,6 @@ class NotebookConnectorOut(BaseModel):
     user_id: str
     code: str
     name: str
-    connection_type: str
     local_file_path: str | None = None
     embedding_local_file_path: str | None = None
     embedding_name: str | None = None

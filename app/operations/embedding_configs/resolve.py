@@ -53,7 +53,7 @@ class Resolve(Validator):
 
     def _attrs(self):
         options = embedding_model_options(self.connector)
-        provider = self.connector.connection_type
+        provider = "local"
         model_name = embedding_model_name(self.connector)
         model_path = embedding_local_file_path(self.connector)
         dimensions = embedding_size(self.connector)

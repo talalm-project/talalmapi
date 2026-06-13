@@ -132,7 +132,7 @@ Useful development endpoints:
 - `POST /login`
 - `/users` CRUD endpoints require an authenticated admin user
 - `GET /system/local_models` returns local GGUF models from the local manifest
-- `/connectors` CRUD endpoints manage local and OpenAI model connectors
+- `/connectors` CRUD endpoints manage local model connectors
 - `POST /connectors/{id}/infer` runs inference through a connector
 - `POST /uploads`
 
@@ -163,7 +163,7 @@ location, set `LOCAL_MODELS_MANIFEST_PATH` in `talalmapi/.env`.
 
 ## Connectors
 
-Connectors store provider-specific runtime settings in the `data` JSON
+Connectors store local runtime settings in the `data` JSON
 attribute. Caller-provided keys are preserved, and the backend adds a normalized
 `data.metadata` object during connector creation and update. Inference and
 embedding generation read from this metadata first, while older top-level keys
@@ -227,16 +227,6 @@ For `local` connectors:
 - `embeddings.model_options` comes from top-level
   `data.embedding_model_options`.
 
-For `openai` connectors:
-
-- `provider` is `openai`.
-- `*.model.local_file_path` is `null`.
-- `embeddings.model.name` is copied from `embedding_name`.
-- Known embedding sizes and token limits are populated for
-  `text-embedding-3-small`, `text-embedding-3-large`, and
-  `text-embedding-ada-002`; unknown embedding models use `null` for
-  `embedding_size` and the default embedding input token limit.
-
 Embedding chunking is stored in character units because file parsers extract
 plain text before token-safe splitting. Local embedding generation still checks
 the runtime llama token limit before embedding, and uses the smaller of the
@@ -244,10 +234,7 @@ metadata limit and the actual llama context capacity.
 
 ## Connector Inference
 
-Connectors support two application-level `connection_type` values:
-
-- `local`: uses `llama-cpp-python` against a local `.gguf` model file.
-- `openai`: uses the OpenAI Python SDK against the Responses API.
+Connectors use `llama-cpp-python` against local `.gguf` model files.
 
 Run inference with:
 
@@ -263,9 +250,8 @@ Request body:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `prompt` | string | Convenience field for a single user prompt. |
-| `input` | string or array | For local connectors, string input becomes a user chat message and array input is passed as chat messages. For OpenAI connectors, this is passed to `responses.create`. |
-| `model` | string | Optional OpenAI model override. Defaults to the connector `name`. |
-| `options` | object | Additional SDK options passed to `create_chat_completion` for local connectors or `responses.create` for OpenAI connectors. |
+| `input` | string or array | String input becomes a user chat message and array input is passed as chat messages. |
+| `options` | object | Additional SDK options passed to `create_chat_completion`. |
 
 Local inference only accepts model paths ending in `.gguf`, case-insensitive.
 Local connectors use `create_chat_completion`, so instruction/chat GGUF models
@@ -292,7 +278,7 @@ Response body:
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `response` | object | The complete SDK response returned by `llama-cpp-python` or the OpenAI SDK. |
+| `response` | object | The complete SDK response returned by `llama-cpp-python`. |
 | `details` | object | Derived inference metrics. |
 
 `details` contains:
@@ -317,9 +303,7 @@ You are a helpful assistant. Answer in Markdown. Keep the response complete and 
 ```
 
 For local connectors, this prompt is prepended as a `system` message unless the
-request already includes a `system` or `developer` message. For OpenAI
-connectors, it is sent as `instructions` unless `options.instructions` is
-provided.
+request already includes a `system` or `developer` message.
 
 ## File Uploads with RustFS
 

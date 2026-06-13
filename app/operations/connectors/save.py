@@ -1,6 +1,6 @@
 from sqlalchemy import select
 
-from app.models.connector import ALLOWED_CONNECTION_TYPES, Connector
+from app.models.connector import Connector
 from app.operations.connectors.metadata import build_connector_data
 from app.operations.validator import Validator
 
@@ -12,11 +12,9 @@ class Save(Validator):
         user,
         code=None,
         name=None,
-        connection_type=None,
         local_file_path=None,
         embedding_local_file_path=None,
         embedding_name=None,
-        api_key=None,
         data=None,
         changed_fields=None,
         connector=None,
@@ -27,18 +25,14 @@ class Save(Validator):
         self.connector = connector
         self.code = code
         self.name = name
-        self.connection_type = connection_type
         self.local_file_path = local_file_path
         self.embedding_local_file_path = embedding_local_file_path
         self.embedding_name = embedding_name
-        self.api_key = api_key
         self.data = data
         self.changed_fields = changed_fields or set()
         self.payload = {
             "code": [],
             "name": [],
-            "connection_type": [],
-            "api_key": [],
             "data": [],
         }
 
@@ -50,7 +44,6 @@ class Save(Validator):
                 connector_attrs = {
                     "code": self._normalized_code(),
                     "name": self.name,
-                    "connection_type": self._connection_type(),
                     "local_file_path": self.local_file_path,
                     "embedding_local_file_path": self.embedding_local_file_path,
                     "embedding_name": self.embedding_name,
@@ -59,11 +52,10 @@ class Save(Validator):
                     user_id=self.user.id,
                     code=self._normalized_code(),
                     name=self.name,
-                    connection_type=self._connection_type(),
+                    connection_type="local",
                     local_file_path=self.local_file_path,
                     embedding_local_file_path=self.embedding_local_file_path,
                     embedding_name=self.embedding_name,
-                    api_key=self.api_key,
                     data=build_connector_data(connector_attrs, self.data),
                 )
                 self.session.add(self.connector)
@@ -86,13 +78,6 @@ class Save(Validator):
             self.payload["name"].append("required")
         if self.data is not None and not isinstance(self.data, dict):
             self.payload["data"].append("invalid")
-        if self.connection_type and self.connection_type not in ALLOWED_CONNECTION_TYPES:
-            self.payload["connection_type"].append("invalid")
-
-        connection_type = self._connection_type()
-        api_key = self._api_key()
-        if connection_type == "openai" and _blank(api_key):
-            self.payload["api_key"].append("required")
 
         code = self._normalized_code()
         if self._should_validate_code() and code and self._code_taken(code):
@@ -105,33 +90,16 @@ class Save(Validator):
             self.connector.code = self._normalized_code()
         if "name" in self.changed_fields:
             self.connector.name = self.name
-        if "connection_type" in self.changed_fields:
-            self.connector.connection_type = self.connection_type
         if "local_file_path" in self.changed_fields:
             self.connector.local_file_path = self.local_file_path
         if "embedding_local_file_path" in self.changed_fields:
             self.connector.embedding_local_file_path = self.embedding_local_file_path
         if "embedding_name" in self.changed_fields:
             self.connector.embedding_name = self.embedding_name
-        if "api_key" in self.changed_fields:
-            self.connector.api_key = self.api_key
-
         data = self.connector.data or {}
         if "data" in self.changed_fields and self.data is not None:
             data = self.data
         self.connector.data = build_connector_data(self.connector, data)
-
-    def _connection_type(self):
-        if self.connector is None:
-            return self.connection_type or "local"
-
-        return self.connection_type if "connection_type" in self.changed_fields else self.connector.connection_type
-
-    def _api_key(self):
-        if self.connector is None:
-            return self.api_key
-
-        return self.api_key if "api_key" in self.changed_fields else self.connector.api_key
 
     def _normalized_code(self):
         if self.code is not None:

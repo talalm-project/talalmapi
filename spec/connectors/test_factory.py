@@ -12,24 +12,21 @@ def test_connector_factory_creates_connector(db_session):
     assert connector.local_file_path.endswith(".gguf")
     assert connector.embedding_local_file_path.endswith(".gguf")
     assert connector.embedding_name.startswith("Embedding ")
-    assert connector.api_key is None
     assert connector.data == {"model": "llama"}
     assert connector.created_at is not None
     assert connector.updated_at is not None
 
 
 def test_connector_to_dict_returns_public_fields(db_session):
-    connector = ConnectorFactory(api_key="sk-secret", data={"model": "llama"})
+    connector = ConnectorFactory(data={"model": "llama"})
 
     assert connector.to_dict() == {
         "id": connector.id,
         "user_id": connector.user_id,
         "code": connector.code,
         "name": connector.name,
-        "connection_type": connector.connection_type,
         "local_file_path": connector.local_file_path,
         "embedding_local_file_path": connector.embedding_local_file_path,
         "embedding_name": connector.embedding_name,
         "data": {"model": "llama"},
     }
-    assert "api_key" not in connector.to_dict()

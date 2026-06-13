@@ -10,7 +10,6 @@ class DashboardSummary(BaseModel):
     active_notebooks_count: int
     connectors_count: int
     local_connectors_count: int
-    openai_connectors_count: int
     active_files_count: int
     queued_files_count: int
     failed_files_count: int

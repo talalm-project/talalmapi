@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 from app.helpers.api_helpers import build_jwt_header, generate_jwt
 from app.models.embedding_config import EmbeddingConfig
 from app.models.notebook import DEFAULT_NOTEBOOK_SYSTEM_PROMPT, Notebook
@@ -101,14 +99,15 @@ def test_create_notebook_reuses_existing_embedding_config(client, app, db_sessio
     user = UserFactory(role="user")
     connector = ConnectorFactory(
         user=user,
-        embedding_name="text-embedding-3-small",
+        embedding_name="Local Embedding",
+        embedding_local_file_path="/tmp/local-embedding.gguf",
         data={
             "metadata": {
-                "provider": "openai",
+                "provider": "local",
                 "embeddings": {
                     "model": {
-                        "name": "text-embedding-3-small",
-                        "local_file_path": None,
+                        "name": "Local Embedding",
+                        "local_file_path": "/tmp/local-embedding.gguf",
                         "embedding_size": 1536,
                     },
                     "model_options": {},
@@ -461,60 +460,6 @@ def test_infer_notebook_uses_notebook_connector_and_system_prompt(client, app, d
             },
         ],
         "max_tokens": 16,
-    }
-
-
-def test_infer_notebook_uses_system_prompt_as_openai_instructions(client, app, db_session, monkeypatch):
-    user = UserFactory(role="user")
-    connector = ConnectorFactory(
-        user=user,
-        name="gpt-4.1",
-        connection_type="openai",
-        local_file_path=None,
-        api_key="sk-secret",
-    )
-    notebook = NotebookFactory(
-        user=user,
-        connector=connector,
-        system_prompt="Use notebook context before general knowledge.",
-    )
-    captured = {}
-
-    class FakeResponses:
-        def create(self, **kwargs):
-            captured["create"] = kwargs
-            return SimpleNamespace(
-                model_dump=lambda mode: {
-                    "id": "resp_notebook",
-                    "status": "completed",
-                    "mode": mode,
-                }
-            )
-
-    class FakeOpenAI:
-        def __init__(self, **kwargs):
-            captured["init"] = kwargs
-            self.responses = FakeResponses()
-
-    monkeypatch.setattr("app.operations.connectors.infer._openai_client_class", lambda: FakeOpenAI)
-
-    response = client.post(
-        f"/notebooks/{notebook.id}/infer",
-        headers=_headers(app, user),
-        json={"input": "Summarize"},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["response"] == {
-        "id": "resp_notebook",
-        "status": "completed",
-        "mode": "json",
-    }
-    assert captured["init"] == {"api_key": "sk-secret"}
-    assert captured["create"] == {
-        "model": "gpt-4.1",
-        "input": "Notebook context:\n\nNo relevant notebook context was retrieved.\n\nUser question:\n\nSummarize",
-        "instructions": "Use notebook context before general knowledge.",
     }
 
 

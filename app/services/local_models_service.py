@@ -41,11 +41,12 @@ class LocalModelsService:
 
         if model_type == "inference":
             context_window = self._context_window_for_path(record.get("path"))
-            recommended = min(context_window or DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS, DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS)
+            max_context_window = context_window or DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS
+            recommended = min(max_context_window, DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS)
             payload.update(
                 {
                     "context_window_min": DEFAULT_LLAMA_CPP_CONTEXT_WINDOW_TOKENS,
-                    "context_window_max": recommended,
+                    "context_window_max": max_context_window,
                     "context_window_recommended": recommended,
                 }
             )
