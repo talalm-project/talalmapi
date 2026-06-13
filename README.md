@@ -58,8 +58,6 @@ Important variables:
 - `STORAGE_*`: RustFS file storage settings through the S3-compatible API
 - `LOCAL_MODELS_MANIFEST_PATH`: path to the local GGUF model manifest
 - `INFERENCE_SYSTEM_PROMPT`: global inference system prompt; defaults to Markdown answers
-- `AWS_ENDPOINT`: set to `http://localhost:4566` when developing against MiniStack
-- `SQS_QUEUE_URL`: queue URL for the SQS queue your app should use
 
 With the default values, the app expects PostgreSQL databases named:
 - `default_api_fast_development`
@@ -128,24 +126,6 @@ python -m app.cli server
 ```
 
 This starts Uvicorn on `http://127.0.0.1:3000`.
-
-If you need local SQS, start MiniStack in a separate terminal:
-
-```bash
-bin/start_ministack.sh
-```
-
-That script starts MiniStack on `http://localhost:4566`, creates a FIFO queue,
-and prints the `AWS_ENDPOINT` and `SQS_QUEUE_URL` values to export into your
-shell or `.env`.
-
-Example:
-
-```bash
-export AWS_ENDPOINT=http://localhost:4566
-export SQS_QUEUE_URL=http://localhost:4566/000000000000/tphlms.fifo
-python -m app.cli server
-```
 
 Useful development endpoints:
 - `GET /health`

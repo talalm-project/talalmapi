@@ -1,9 +1,5 @@
 # Documentation
 
-For local SQS development, use `bin/start_ministack.sh`. It starts MiniStack on
-`http://localhost:4566`, creates a queue, and prints the `AWS_ENDPOINT` and
-`SQS_QUEUE_URL` values to use in your shell or `.env`.
-
 Local GGUF models are described by `manifest-local-models.yml`, which should be
 created from `manifest-local-models.yml.example` and kept out of git along with
 the actual files under `models/`. The `GET /system/local_models` endpoint reads

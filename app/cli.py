@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import os
 import signal
@@ -250,6 +251,15 @@ def run_system_seed(_args):
     return status_code
 
 
+def run_system_doctor(_args):
+    from app.operations.system import Doctor
+
+    operation = Doctor(_active_settings())
+    operation.execute()
+    print(json.dumps(operation.to_dict(), indent=2, sort_keys=True))
+    return 0
+
+
 def run_system_start_notebook_worker(_args):
     from app.db import db
     from app.operations.notebooks import NotebookWorker
@@ -293,6 +303,9 @@ def build_parser():
 
     seed_parser = subparsers.add_parser("system:seed", help="Seed the default application data")
     seed_parser.set_defaults(handler=run_system_seed)
+
+    doctor_parser = subparsers.add_parser("system:doctor", help="Print sanitized system configuration")
+    doctor_parser.set_defaults(handler=run_system_doctor)
 
     notebook_worker_parser = subparsers.add_parser(
         "system:start_notebook_worker",

@@ -1,6 +1,13 @@
 from types import SimpleNamespace
+import json
 
-from app.cli import build_parser, run_services_create_bucket, run_system_seed, run_system_start_notebook_worker
+from app.cli import (
+    build_parser,
+    run_services_create_bucket,
+    run_system_doctor,
+    run_system_seed,
+    run_system_start_notebook_worker,
+)
 from app.helpers.api_helpers import password_match
 from app.models.user import User
 from spec.factories import UserFactory
@@ -83,6 +90,28 @@ def test_services_create_bucket_command_is_registered():
     assert args.handler is run_services_create_bucket
 
 
+def test_system_doctor_prints_sanitized_configuration(app, capsys, monkeypatch):
+    monkeypatch.setattr("app.cli._active_settings", lambda: app.state.settings)
+
+    result = run_system_doctor(SimpleNamespace())
+
+    assert result == 0
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+    assert payload["app"]["name"] == app.state.settings.APP_NAME
+    assert payload["app"]["env"] == "test"
+    assert payload["database"]["configured"] is True
+    assert payload["storage"]["s3"]["bucket"] == "talalm-test"
+    assert payload["storage"]["s3"]["access_key_configured"] is True
+    assert app.state.settings.SECRET_KEY not in output
+
+
+def test_system_doctor_command_is_registered():
+    args = build_parser().parse_args(["system:doctor"])
+
+    assert args.handler is run_system_doctor
+
+
 def test_start_notebook_worker_command_is_registered():
     args = build_parser().parse_args(["system:start_notebook_worker"])
 
@@ -115,6 +144,7 @@ def test_namespaced_commands_use_colon_separator():
     parser = build_parser()
 
     assert parser.parse_args(["system:greet"]).command == "system:greet"
+    assert parser.parse_args(["system:doctor"]).command == "system:doctor"
     assert parser.parse_args(["system:start_notebook_worker"]).command == "system:start_notebook_worker"
     assert parser.parse_args(["db:migrate"]).command == "db:migrate"
     assert parser.parse_args(["db:downgrade"]).command == "db:downgrade"
