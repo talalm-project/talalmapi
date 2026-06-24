@@ -8,11 +8,14 @@ from app.db import Base, db
 from app.helpers.api_helpers import build_jwt_header, generate_jwt
 from spec.factories import (
     ConnectorFactory,
+    CompileJobFactory,
     EmbeddingConfigFactory,
     NotebookFactory,
     NotebookFileFactory,
     NotebookNoteFactory,
     NotebookVectorFactory,
+    PaperFactory,
+    PaperFileFactory,
     UserFactory,
 )
 
@@ -37,20 +40,26 @@ def client(app):
 def db_session(app):
     session = db.session()
     ConnectorFactory._meta.sqlalchemy_session = session
+    CompileJobFactory._meta.sqlalchemy_session = session
     EmbeddingConfigFactory._meta.sqlalchemy_session = session
     NotebookFactory._meta.sqlalchemy_session = session
     NotebookFileFactory._meta.sqlalchemy_session = session
     NotebookNoteFactory._meta.sqlalchemy_session = session
     NotebookVectorFactory._meta.sqlalchemy_session = session
+    PaperFactory._meta.sqlalchemy_session = session
+    PaperFileFactory._meta.sqlalchemy_session = session
     UserFactory._meta.sqlalchemy_session = session
     yield session
     session.close()
     ConnectorFactory._meta.sqlalchemy_session = None
+    CompileJobFactory._meta.sqlalchemy_session = None
     EmbeddingConfigFactory._meta.sqlalchemy_session = None
     NotebookFactory._meta.sqlalchemy_session = None
     NotebookFileFactory._meta.sqlalchemy_session = None
     NotebookNoteFactory._meta.sqlalchemy_session = None
     NotebookVectorFactory._meta.sqlalchemy_session = None
+    PaperFactory._meta.sqlalchemy_session = None
+    PaperFileFactory._meta.sqlalchemy_session = None
     UserFactory._meta.sqlalchemy_session = None
 
 

@@ -7,7 +7,7 @@ It is based on the SQLAlchemy models in `app/models`.
 
 - ORM: SQLAlchemy declarative models using `app.db.Base`
 - Migrations: Alembic revisions in `alembic/versions`
-- Current model tables: `users`, `connectors`, `notebooks`, `notebook_files`, `notebook_notes`, `embedding_configs`, `notebook_vectors`
+- Current model tables: `users`, `connectors`, `notebooks`, `notebook_files`, `notebook_notes`, `embedding_configs`, `notebook_vectors`, `papers`, `paper_files`, `compile_jobs`
 
 ## Tables
 
@@ -101,6 +101,109 @@ Connector inference is application behavior and does not add database columns.
 Local connector inference requires `local_file_path` to point to a `.gguf`
 model.
 
+### `papers`
+
+Stores paper records and JSONB metadata.
+
+Model: `app.models.paper.Paper`
+
+| Column | Type | Nullable | Default | Constraints / Notes |
+| --- | --- | --- | --- | --- |
+| `id` | `String(36)` | No | Generated UUID string | Primary key |
+| `user_id` | `String(36)` | No | None | Foreign key to `users.id`, indexed |
+| `name` | `String(255)` | No | None | Paper display name |
+| `data` | `JSONB` | No | `{}` | Metadata about the paper |
+| `created_at` | `DateTime(timezone=True)` | No | Current UTC datetime | Set by ORM on insert; migration has database default |
+| `updated_at` | `DateTime(timezone=True)` | No | Current UTC datetime | Set by ORM on insert and update; migration has insert default |
+
+#### Primary Key
+
+- `papers.id`
+
+#### Indexes
+
+| Name | Columns | Unique | Notes |
+| --- | --- | --- | --- |
+| `ix_papers_user_id` | `user_id` | No | Supports user-scoped paper lookups |
+
+#### Relationships
+
+- `papers.user_id` references `users.id`.
+
+### `paper_files`
+
+Stores metadata for files attached to a paper. File contents live in RustFS
+under each row's `storage_key`.
+
+Model: `app.models.paper_file.PaperFile`
+
+| Column | Type | Nullable | Default | Constraints / Notes |
+| --- | --- | --- | --- | --- |
+| `id` | `String(36)` | No | Generated UUID string | Primary key |
+| `paper_id` | `String(36)` | No | None | Foreign key to `papers.id`, indexed |
+| `path` | `String(1024)` | No | None | Project-relative path such as `source/main.tex` |
+| `filename` | `String(255)` | No | None | Sanitized base filename |
+| `content_type` | `String(255)` | Yes | None | Uploaded file MIME type |
+| `size` | `BigInteger` | Yes | None | Uploaded file size in bytes |
+| `storage_key` | `String(1200)` | No | None | RustFS/S3 object key |
+| `created_at` | `DateTime(timezone=True)` | No | Current UTC datetime | Set by ORM on insert; migration has database default |
+| `updated_at` | `DateTime(timezone=True)` | No | Current UTC datetime | Set by ORM on insert and update; migration has insert default |
+
+#### Indexes
+
+| Name | Columns | Unique | Notes |
+| --- | --- | --- | --- |
+| `ix_paper_files_paper_id` | `paper_id` | No | Supports paper-scoped file lookups |
+| `uq_paper_files_paper_id_path` | `paper_id`, `path` | Yes | Prevents duplicate project paths per paper |
+| `uq_paper_files_storage_key` | `storage_key` | Yes | Prevents duplicate RustFS object references |
+
+#### Primary Key
+
+- `paper_files.id`
+
+#### Relationships
+
+- `paper_files.paper_id` references `papers.id`.
+
+### `compile_jobs`
+
+Tracks LaTeX compilation jobs for papers, including status, logs, and RustFS
+artifact keys for generated PDFs and build logs.
+
+Model: `app.models.compile_job.CompileJob`
+
+| Column | Type | Nullable | Default | Constraints / Notes |
+| --- | --- | --- | --- | --- |
+| `id` | `String(36)` | No | Generated UUID string | Primary key |
+| `paper_id` | `String(36)` | No | None | Foreign key to `papers.id`, indexed |
+| `status` | `String(50)` | No | `pending` | Application-level status: `pending`, `running`, `success`, `failed` |
+| `compiler` | `String(50)` | No | `pdflatex` | Application-level compiler value |
+| `builder` | `String(50)` | No | `latexmk` | Build tool |
+| `main_file` | `String(1024)` | No | `main.tex` | Main LaTeX entrypoint |
+| `output_pdf_key` | `String(1200)` | Yes | None | RustFS object key for generated PDF |
+| `log_key` | `String(1200)` | Yes | None | RustFS object key for full compile log |
+| `logs` | `Text` | Yes | None | Captured/truncated compile logs |
+| `error_message` | `Text` | Yes | None | Controlled failure message |
+| `started_at` | `DateTime(timezone=True)` | Yes | None | Compile start timestamp |
+| `finished_at` | `DateTime(timezone=True)` | Yes | None | Compile completion timestamp |
+| `created_at` | `DateTime(timezone=True)` | No | Current UTC datetime | Set by ORM on insert; migration has database default |
+| `updated_at` | `DateTime(timezone=True)` | No | Current UTC datetime | Set by ORM on insert and update; migration has insert default |
+
+#### Indexes
+
+| Name | Columns | Unique | Notes |
+| --- | --- | --- | --- |
+| `ix_compile_jobs_paper_id` | `paper_id` | No | Supports paper-scoped job lookups |
+| `ix_compile_jobs_status` | `status` | No | Supports status filtering and operational checks |
+
+#### Primary Key
+
+- `compile_jobs.id`
+
+#### Relationships
+
+- `compile_jobs.paper_id` references `papers.id`.
+
 ## Migration Notes
 
 The Alembic history currently creates this schema through these revisions:
@@ -125,6 +228,11 @@ The Alembic history currently creates this schema through these revisions:
 | `0015_notebook_followup_prompt` | Updates the default notebook prompt so conversation context can resolve follow-up references while notebook context remains the factual source. |
 | `0016_notebook_notes` | Creates notebook note records for saved model responses associated with notebooks. |
 | `0017_note_context_nullable` | Allows notebook note context state to be stored as `true` or `NULL`. |
+| `0018_note_context_prompt` | Updates the default notebook prompt so notebook file context and notebook note context are both named as factual sources. |
+| `0019_create_papers` | Creates paper records with a name, JSONB metadata, and timestamps. |
+| `0020_papers_user` | Adds user ownership to papers with a non-null `user_id` foreign key. |
+| `0021_paper_files` | Creates paper file metadata records linked to papers and RustFS object keys. |
+| `0022_compile_jobs` | Creates paper compile job records for LaTeX builds and RustFS artifact keys. |
 
 ## Current Schema Boundaries
 

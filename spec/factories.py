@@ -1,12 +1,15 @@
 import factory
 
 from app.helpers.api_helpers import build_password_hash
+from app.models.compile_job import CompileJob
 from app.models.connector import Connector
 from app.models.embedding_config import EmbeddingConfig
 from app.models.notebook import Notebook
 from app.models.notebook_file import NotebookFile
 from app.models.notebook_note import NotebookNote
 from app.models.notebook_vector import NotebookVector
+from app.models.paper import Paper
+from app.models.paper_file import PaperFile
 from app.models.user import User
 
 
@@ -131,6 +134,48 @@ class NotebookVectorFactory(factory.alchemy.SQLAlchemyModelFactory):
     text = factory.Sequence(lambda n: f"Notebook vector chunk {n}")
     embedding = factory.LazyAttribute(lambda vector: [float(vector.chunk_index), 1.0, 0.0])
     metadata_ = factory.Dict({})
+
+
+class PaperFactory(factory.alchemy.SQLAlchemyModelFactory):
+    class Meta:
+        model = Paper
+        sqlalchemy_session = None
+        sqlalchemy_session_persistence = "commit"
+
+    user = factory.SubFactory(UserFactory)
+    name = factory.Sequence(lambda n: f"Paper {n}")
+    data = factory.Dict({})
+
+
+class PaperFileFactory(factory.alchemy.SQLAlchemyModelFactory):
+    class Meta:
+        model = PaperFile
+        sqlalchemy_session = None
+        sqlalchemy_session_persistence = "commit"
+
+    paper = factory.SubFactory(PaperFactory)
+    path = factory.Sequence(lambda n: f"source/file-{n}.tex")
+    filename = factory.LazyAttribute(lambda paper_file: paper_file.path.split("/")[-1])
+    content_type = "application/x-tex"
+    size = 1024
+    storage_key = factory.LazyAttribute(lambda paper_file: f"papers/{paper_file.paper.id}/{paper_file.path}")
+
+
+class CompileJobFactory(factory.alchemy.SQLAlchemyModelFactory):
+    class Meta:
+        model = CompileJob
+        sqlalchemy_session = None
+        sqlalchemy_session_persistence = "commit"
+
+    paper = factory.SubFactory(PaperFactory)
+    status = "pending"
+    compiler = "pdflatex"
+    builder = "latexmk"
+    main_file = "main.tex"
+    output_pdf_key = None
+    log_key = None
+    logs = None
+    error_message = None
 
 
 def _factory_embedding_size(embedding_name):

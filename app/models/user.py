@@ -33,6 +33,7 @@ class User(Base):
     )
     connectors = relationship("Connector", back_populates="user")
     notebooks = relationship("Notebook", back_populates="user")
+    papers = relationship("Paper", back_populates="user")
 
     def full_name(self):
         return f"{self.last_name}, {self.first_name}"

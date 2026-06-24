@@ -65,3 +65,6 @@ class Config:
         "INFERENCE_SYSTEM_PROMPT",
         "You are a helpful assistant. Answer in Markdown. Keep the response complete and concise enough to fit within the configured maximum output tokens.",
     )
+    LATEX_COMPILE_TIMEOUT_SECONDS = int(os.getenv("LATEX_COMPILE_TIMEOUT_SECONDS", "60"))
+    LATEX_TMP_ROOT = os.getenv("LATEX_TMP_ROOT", "/tmp/papers")
+    LATEX_DEFAULT_COMPILER = os.getenv("LATEX_DEFAULT_COMPILER", "pdflatex")
