@@ -16,6 +16,7 @@ from app.operations.papers import (
     Index,
     IndexCompileJobs,
     IndexFiles,
+    LatexSupportInference,
     ReadFileContent,
     Save,
     SaveFileContent,
@@ -24,7 +25,7 @@ from app.operations.papers import (
     ShowFile,
 )
 from app.schemas.compile_job import CompileJobCollection, CompileJobRead
-from app.schemas.paper import PaperCollection, PaperCreate, PaperRead
+from app.schemas.paper import PaperCollection, PaperCreate, PaperLatexSupportInference, PaperRead
 from app.schemas.paper_file import PaperFileCollection, PaperFileContentRead, PaperFileContentUpdate, PaperFileRead
 from app.services.paper_compile_service import PaperCompileService
 from app.storage import get_file
@@ -69,6 +70,30 @@ def show(
         return JSONResponse(status_code=404, content={"message": "not found"})
 
     return operation.paper.to_dict()
+
+
+@router.post("/{paper_id}/latex_support_inference")
+def latex_support_inference(
+    paper_id: str,
+    payload: PaperLatexSupportInference,
+    current_user: User = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    operation = LatexSupportInference(
+        session=session,
+        user=current_user,
+        paper_id=paper_id,
+        user_prompt=payload.user_prompt,
+        note_ids=payload.note_ids,
+        document_ids=payload.document_ids,
+    )
+    operation.execute()
+    if not operation.found():
+        return JSONResponse(status_code=404, content={"message": "not found"})
+    if not operation.valid():
+        return JSONResponse(status_code=422, content=operation.errors)
+
+    return operation.payload
 
 
 @router.delete("/{paper_id}")

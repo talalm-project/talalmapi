@@ -19,3 +19,9 @@ class PaperRead(BaseModel):
 
 class PaperCollection(BaseModel):
     records: list[PaperRead] = Field(default_factory=list)
+
+
+class PaperLatexSupportInference(BaseModel):
+    user_prompt: str | None = None
+    note_ids: list[str] = Field(default_factory=list)
+    document_ids: list[str] = Field(default_factory=list)

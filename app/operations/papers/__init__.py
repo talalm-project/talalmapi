@@ -6,6 +6,7 @@ from app.operations.papers.destroy_folder import DestroyFolder
 from app.operations.papers.file_content import ReadFileContent, SaveFileContent
 from app.operations.papers.index import Index
 from app.operations.papers.index_files import IndexFiles
+from app.operations.papers.latex_support_inference import LatexSupportInference
 from app.operations.papers.save import DEFAULT_PAPER_DATA, Save
 from app.operations.papers.show import Show
 from app.operations.papers.show_file import ShowFile
@@ -20,6 +21,7 @@ __all__ = [
     "Index",
     "IndexCompileJobs",
     "IndexFiles",
+    "LatexSupportInference",
     "ReadFileContent",
     "Save",
     "SaveFileContent",
