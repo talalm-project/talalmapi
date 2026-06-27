@@ -84,8 +84,12 @@ def latex_support_inference(
         user=current_user,
         paper_id=paper_id,
         user_prompt=payload.user_prompt,
+        connector_id=payload.connector_id,
         note_ids=payload.note_ids,
         document_ids=payload.document_ids,
+        notebook_id=payload.notebook_id,
+        notebook_note_ids=payload.notebook_note_ids,
+        notebook_file_ids=payload.notebook_file_ids,
     )
     operation.execute()
     if not operation.found():

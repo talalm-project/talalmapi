@@ -10,6 +10,7 @@ from app.operations.papers.latex_support_inference import LatexSupportInference
 from app.operations.papers.save import DEFAULT_PAPER_DATA, Save
 from app.operations.papers.show import Show
 from app.operations.papers.show_file import ShowFile
+from app.operations.papers.validate_latex_support_inference import ValidateLatexSupportInference
 
 __all__ = [
     "CreateFile",
@@ -28,4 +29,5 @@ __all__ = [
     "Show",
     "ShowCompileJob",
     "ShowFile",
+    "ValidateLatexSupportInference",
 ]

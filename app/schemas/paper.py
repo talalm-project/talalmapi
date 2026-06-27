@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -22,6 +24,10 @@ class PaperCollection(BaseModel):
 
 
 class PaperLatexSupportInference(BaseModel):
-    user_prompt: str | None = None
-    note_ids: list[str] = Field(default_factory=list)
-    document_ids: list[str] = Field(default_factory=list)
+    user_prompt: Any = None
+    connector_id: Any = None
+    note_ids: Any = Field(default_factory=list)
+    document_ids: Any = Field(default_factory=list)
+    notebook_id: Any = None
+    notebook_note_ids: Any = Field(default_factory=list)
+    notebook_file_ids: Any = Field(default_factory=list)
